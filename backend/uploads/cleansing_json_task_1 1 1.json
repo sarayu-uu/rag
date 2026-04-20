@@ -1,0 +1,20 @@
+[
+    {
+        "transaction_id": "T001",
+        "product_id": "P001",
+        "amount": 100,
+        "customer_name": "Alice"
+    },
+    {
+        "transaction_id": "T002",
+        "product_id": "P002",
+        "amount": null,
+        "customer_name": null
+    },
+    {
+        "transaction_id": null,
+        "product_id": "P003",
+        "amount": 150,
+        "customer_name": "Bob"
+    }
+]
