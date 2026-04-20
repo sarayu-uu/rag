@@ -15,7 +15,12 @@ ENV_FILE = BASE_DIR / "backend" / ".env"
 # Load values from backend/.env into process environment.
 load_dotenv(dotenv_path=ENV_FILE, override=False)
 
-# Put your key in backend/.env as: GEMINI_API_KEY=your_key_here
+# Put your keys in backend/.env as needed, for example:
+# GROQ_API_KEY=your_key_here
+# GROQ_MODEL=llama-3.3-70b-versatile
+# GEMINI_API_KEY=your_key_here
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 # Comma-separated list of allowed frontend origins for CORS.

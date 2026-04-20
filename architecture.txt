@@ -1,0 +1,60 @@
+RAG Repository Architecture
+===========================
+
+Note:
+- This tree focuses on the actual project structure and purpose of each part.
+- Large generated/dependency folders such as `venv`, `frontend/node_modules`, and Python `__pycache__` folders are noted but not expanded.
+- `.env` is listed as a config file only; no secret values are shown.
+
+rag/
+|-- .git/                         -> Git metadata and version history for the repository.
+|-- .gitignore                    -> Prevents local env files, virtual envs, and node modules from being committed.
+|-- README.md                     -> Basic run instructions for the backend, frontend, and CLI bot.
+|-- architecture.ttxt             -> This high-level project structure and purpose document.
+|-- backend/                      -> Python backend for ingestion and terminal-based LLM chat.
+|   |-- .env                      -> Environment variables such as API keys and CORS settings.
+|   |-- chat_cli.py               -> Starts the command-line Groq chatbot in the terminal.
+|   |-- requirements.txt          -> Backend Python dependencies.
+|   |-- app/                      -> Main backend application package.
+|   |   |-- main.py               -> FastAPI entry point; creates the app and registers routes/middleware.
+|   |   |-- config/               -> Central place for backend configuration.
+|   |   |   |-- settings.py       -> Loads `.env`, upload paths, CORS origins, and model settings.
+|   |   |-- routes/               -> API route definitions.
+|   |   |   |-- upload.py         -> `/upload` endpoint for file or URL ingestion.
+|   |   |-- services/             -> Business logic and reusable backend services.
+|   |   |   |-- chatgroq_bot.py   -> Minimal ChatGroq-powered terminal bot with in-memory chat history.
+|   |   |   |-- ingestion/        -> File and URL ingestion pipeline.
+|   |   |   |   |-- __init__.py   -> Marks the ingestion folder as a Python package.
+|   |   |   |   |-- router.py     -> Chooses the correct loader based on file type or URL.
+|   |   |   |   |-- loaders.py    -> Extracts text from PDF, DOCX, PPTX, images, CSV, JSON, and web pages.
+|   |-- testing/                  -> Small experimental or scratch Python scripts.
+|   |   |-- satwik.py             -> Simple test/scratch script.
+|   |   |-- sarayu.py             -> Simple test/scratch script.
+|   |-- uploads/                  -> Stores uploaded sample/source files used by the ingestion flow.
+|   |   |-- Education-Employment Mismatch (2).pdf -> Sample uploaded PDF document.
+|   |   |-- cleansing_json_task_1 1 1.json        -> Sample uploaded JSON document.
+|   |   |-- mermaid-diagram.png                   -> Sample uploaded image file.
+|   |   |-- mermaid-diagram (2).png               -> Additional uploaded image file.
+|   |-- __pycache__/               -> Generated Python bytecode cache; not source code.
+|-- frontend/                     -> React + TypeScript frontend for file upload testing.
+|   |-- index.html                -> Vite HTML entry page.
+|   |-- package.json              -> Frontend scripts and npm dependencies.
+|   |-- package-lock.json         -> Locked frontend dependency versions.
+|   |-- tsconfig.json             -> Main TypeScript compiler configuration.
+|   |-- tsconfig.node.json        -> TypeScript config used for Node/Vite tooling.
+|   |-- vite.config.ts            -> Vite build/dev-server configuration.
+|   |-- src/                      -> Frontend application source.
+|   |   |-- App.tsx               -> Root React component.
+|   |   |-- main.tsx              -> Browser entry point that mounts the React app.
+|   |   |-- styles.css            -> Shared frontend styles.
+|   |   |-- vite-env.d.ts         -> Vite TypeScript environment type definitions.
+|   |   |-- components/           -> Reusable UI components.
+|   |   |   |-- Upload.tsx        -> File upload UI that sends data to the backend `/upload` route.
+|   |-- node_modules/             -> Installed frontend dependencies; generated locally.
+|-- venv/                         -> Local Python virtual environment; generated locally.
+
+Overall flow:
+1. The frontend can upload a file to the FastAPI backend.
+2. The backend stores the file in `backend/uploads`.
+3. The ingestion router picks the right loader and extracts plain text.
+4. Separately, `backend/chat_cli.py` runs a terminal-only Groq chatbot for direct question answering.
