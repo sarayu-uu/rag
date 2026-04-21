@@ -15,6 +15,7 @@ from .loaders import (
     load_image,
     load_csv,
     load_json,
+    load_xml,
     load_web,
 )
 from .text_cleaning import clean_sections, clean_text
@@ -41,6 +42,9 @@ def load_file(file_path: Union[str, Path]) -> str:
 
     elif suffix == ".json":
         return load_json(file_path)
+
+    elif suffix == ".xml":
+        return load_xml(file_path)
 
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
