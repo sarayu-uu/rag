@@ -21,6 +21,7 @@ from app.ingestion.loaders import (
     load_docx,
     load_image,
     load_json,
+    load_xml,
     load_pdf_sections,
     load_pptx,
     load_web,
@@ -64,6 +65,8 @@ def _extract_raw_file(file_path: Path, ext: str) -> dict[str, Any]:
         return {"text": load_csv(file_path), "sections": []}
     if ext == ".json":
         return {"text": load_json(file_path), "sections": []}
+    if ext == ".xml":
+        return {"text": load_xml(file_path), "sections": []}
 
     raise ValueError(f"Unsupported file type: {ext}")
 

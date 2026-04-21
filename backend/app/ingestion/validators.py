@@ -12,7 +12,7 @@ from fastapi import HTTPException, UploadFile
 from app.config.settings import MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".png", ".jpg", ".jpeg", ".csv", ".json"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".png", ".jpg", ".jpeg", ".csv", ".json", ".xml"}
 
 
 def get_extension(filename: str) -> str:
@@ -55,4 +55,3 @@ def validate_extracted_content(text: str) -> None:
             status_code=400,
             detail="No meaningful text could be extracted from this input.",
         )
-

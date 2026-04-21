@@ -29,6 +29,7 @@ from bs4 import BeautifulSoup
 
 # JSON
 import json
+import xml.etree.ElementTree as ET
 
 
 def load_pdf(file_path: Union[str, Path]) -> str:
@@ -98,3 +99,26 @@ def load_json(file_path: Union[str, Path]) -> str:
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return json.dumps(data, indent=2)
+
+
+def load_xml(file_path: Union[str, Path]) -> str:
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+
+    parts: list[str] = []
+
+    def walk(element: ET.Element, path: str) -> None:
+        current_path = f"{path}/{element.tag}" if path else element.tag
+
+        text = (element.text or "").strip()
+        if text:
+            parts.append(f"{current_path}: {text}")
+
+        for key, value in element.attrib.items():
+            parts.append(f"{current_path}[@{key}]: {value}")
+
+        for child in list(element):
+            walk(child, current_path)
+
+    walk(root, "")
+    return "\n".join(parts)
