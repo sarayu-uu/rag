@@ -7,6 +7,7 @@ File purpose:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.upload import router as upload_router
+from app.routes.ingestion_steps import router as ingestion_steps_router
 from app.config.settings import CORS_ORIGINS
 
 app = FastAPI(
@@ -26,6 +27,7 @@ app.add_middleware(
 )
 
 app.include_router(upload_router)
+app.include_router(ingestion_steps_router)
 
 
 @app.get("/", tags=["system"])

@@ -32,12 +32,22 @@ import json
 
 
 def load_pdf(file_path: Union[str, Path]) -> str:
+    sections = load_pdf_sections(file_path)
+    return "\n".join(section["text"] for section in sections)
+
+
+def load_pdf_sections(file_path: Union[str, Path]) -> list[dict[str, Union[int, str]]]:
     doc = fitz.open(file_path)
-    text = ""
-    for page in doc:
-        text += page.get_text()
+    sections: list[dict[str, Union[int, str]]] = []
+    for page_index, page in enumerate(doc, start=1):
+        sections.append(
+            {
+                "page_number": page_index,
+                "text": page.get_text(),
+            }
+        )
     doc.close()
-    return text
+    return sections
 
 
 def load_docx(file_path: Union[str, Path]) -> str:
