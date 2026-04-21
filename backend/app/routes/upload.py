@@ -7,7 +7,7 @@ File purpose:
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 import shutil
-from app.services.ingestion.router import load_file, load_url
+from app.ingestion.router import load_file, load_url
 from app.config.settings import UPLOAD_DIR
 
 router = APIRouter(tags=["ingestion"])
