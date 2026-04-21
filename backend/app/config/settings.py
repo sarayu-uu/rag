@@ -6,6 +6,7 @@ File purpose:
 
 from pathlib import Path
 import os
+from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[3]
@@ -20,13 +21,42 @@ load_dotenv(dotenv_path=ENV_FILE, override=False)
 # GROQ_MODEL=llama-3.3-70b-versatile
 # GEMINI_API_KEY=your_key_here
 # DATABASE_URL=mysql+pymysql://root:password@localhost:3306/ragdb
+# MYSQL_HOST=localhost
+# MYSQL_PORT=3306
+# MYSQL_DATABASE=ragdb
+# MYSQL_USER=root
+# MYSQL_PASSWORD=your_password_here
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "mysql+pymysql://root:ammu2004@localhost:3306/ragdb",
-)
+
+
+def _build_database_url() -> str:
+    """
+    Resolve the database connection string.
+
+    Priority:
+    1. Use DATABASE_URL directly when provided.
+    2. Otherwise build a MySQL URL from MYSQL_* environment variables.
+    """
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        return database_url
+
+    mysql_host = os.getenv("MYSQL_HOST", "localhost")
+    mysql_port = os.getenv("MYSQL_PORT", "3306")
+    mysql_database = os.getenv("MYSQL_DATABASE", "ragdb")
+    mysql_user = os.getenv("MYSQL_USER", "root")
+    mysql_password = quote_plus(os.getenv("MYSQL_PASSWORD", ""))
+    mysql_driver = os.getenv("MYSQL_DRIVER", "pymysql")
+
+    return (
+        f"mysql+{mysql_driver}://{mysql_user}:{mysql_password}"
+        f"@{mysql_host}:{mysql_port}/{mysql_database}"
+    )
+
+
+DATABASE_URL = _build_database_url()
 
 # Comma-separated list of allowed frontend origins for CORS.
 CORS_ORIGINS = [
