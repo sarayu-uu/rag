@@ -12,7 +12,20 @@ from fastapi import HTTPException, UploadFile
 from app.config.settings import MAX_UPLOAD_SIZE_BYTES, MAX_UPLOAD_SIZE_MB
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".pptx", ".png", ".jpg", ".jpeg", ".csv", ".json", ".xml"}
+SUPPORTED_EXTENSIONS = {
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".ppt",
+    ".pptx",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".csv",
+    ".json",
+    ".xml",
+    ".txt",
+}
 
 
 def get_extension(filename: str) -> str:

@@ -6,6 +6,7 @@ File purpose:
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum as PyEnum
@@ -18,16 +19,24 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
+    inspect,
+    select,
     String,
+    text,
     Text,
     create_engine,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
-from app.config.settings import DATABASE_URL
+from app.config.settings import (
+    DATABASE_URL,
+    DEFAULT_INGESTION_EMAIL,
+    DEFAULT_INGESTION_PASSWORD_HASH,
+    DEFAULT_INGESTION_USERNAME,
+)
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
@@ -40,6 +49,15 @@ class RoleName(str, PyEnum):
     ANALYST = "Analyst"
     VIEWER = "Viewer"
     GUEST = "Guest"
+
+
+ROLE_DESCRIPTIONS: dict[RoleName, str] = {
+    RoleName.ADMIN: "Full administrative access across the platform.",
+    RoleName.MANAGER: "Can manage team documents, users, and access rules.",
+    RoleName.ANALYST: "Can ingest documents and run retrieval workflows.",
+    RoleName.VIEWER: "Can view approved content and grounded answers.",
+    RoleName.GUEST: "Limited read-only access to explicitly shared resources.",
+}
 
 
 class DocumentStatus(str, PyEnum):
@@ -166,6 +184,7 @@ class DocumentChunk(Base):
         nullable=True,
         index=True,
     )
+    permissions_tags: Mapped[str] = mapped_column(String(2000), nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     document: Mapped["Document"] = relationship(back_populates="chunks")
 
@@ -283,5 +302,81 @@ class MetricUsage(Base):
 
 
 def init_db() -> None:
-    """Create all tables if they do not exist."""
+    """Create all tables and seed baseline reference data."""
     Base.metadata.create_all(bind=engine)
+    ensure_schema_updates()
+    seed_roles()
+
+
+def ensure_schema_updates() -> None:
+    """Apply lightweight schema updates for existing local databases."""
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "document_chunks" not in table_names:
+        return
+
+    chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")}
+    with engine.begin() as connection:
+        if "permissions_tags" not in chunk_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE document_chunks "
+                    "ADD COLUMN permissions_tags VARCHAR(2000) NOT NULL DEFAULT '[]'"
+                )
+            )
+
+
+def get_db() -> Generator[Session, None, None]:
+    """Yield a request-scoped SQLAlchemy session."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def check_db_connection() -> None:
+    """Raise if the configured database is unreachable."""
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+
+
+def seed_roles() -> None:
+    """Ensure the baseline RBAC roles exist for future phases."""
+    with SessionLocal() as db:
+        existing_roles = set(db.scalars(select(Role.name)).all())
+        missing_roles = [
+            Role(name=role_name, description=ROLE_DESCRIPTIONS[role_name])
+            for role_name in RoleName
+            if role_name not in existing_roles
+        ]
+
+        if not missing_roles:
+            return
+
+        db.add_all(missing_roles)
+        db.commit()
+
+
+def get_or_create_default_ingestion_user(db: Session) -> User:
+    """Return a fallback uploader user for ingestion flows before auth exists."""
+    user = db.scalar(select(User).where(User.email == DEFAULT_INGESTION_EMAIL))
+    if user is not None:
+        return user
+
+    analyst_role = db.scalar(select(Role).where(Role.name == RoleName.ANALYST))
+    if analyst_role is None:
+        analyst_role = Role(name=RoleName.ANALYST, description=ROLE_DESCRIPTIONS[RoleName.ANALYST])
+        db.add(analyst_role)
+        db.flush()
+
+    user = User(
+        username=DEFAULT_INGESTION_USERNAME,
+        email=DEFAULT_INGESTION_EMAIL,
+        password_hash=DEFAULT_INGESTION_PASSWORD_HASH,
+        role_id=analyst_role.id,
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+    return user

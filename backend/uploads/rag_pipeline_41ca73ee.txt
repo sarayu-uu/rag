@@ -1,0 +1,206 @@
+RAG SYSTEM PIPELINE DOCUMENT
+
+======================================== PHASE 1: CORE RAG BACKEND
+DEVELOPMENT ========================================
+
+1.  File Ingestion Layer
+
+-   Accept multiple formats:
+    -   PDF, DOCX, PPTX
+    -   Images (OCR)
+    -   CSV
+    -   JSON/XML
+    -   Web URLs
+-   Detect file type automatically
+-   Use appropriate loaders:
+    -   PDF: PyMuPDF / pdfplumber
+    -   DOCX: python-docx
+    -   PPTX: python-pptx
+    -   Images: Tesseract OCR
+    -   URLs: BeautifulSoup
+    -   CSV: pandas
+
+2.  Text Processing & Chunking
+
+-   Clean extracted text
+-   Apply chunking strategies:
+    -   Recursive chunking
+    -   Semantic chunking (optional)
+-   Maintain metadata (file name, page number)
+
+3.  Embedding Generation
+
+-   Convert text chunks into embeddings
+-   Use embedding models (OpenAI / HuggingFace)
+
+4.  Vector Database Storage
+
+-   Store embeddings + metadata
+-   Suggested DBs:
+    -   FAISS / Pinecone / Weaviate
+
+5.  Retrieval System
+
+-   Convert query to embedding
+-   Perform:
+    -   Semantic search (vector similarity)
+    -   Keyword search (BM25)
+-   Combine results (Hybrid Retrieval)
+
+6.  Re-ranking (Optional but recommended)
+
+-   Rank retrieved chunks
+-   Select top relevant chunks
+
+7.  Context Preparation
+
+-   Select top chunks within token limit
+-   Optimize context window
+
+8.  LLM Response Generation
+
+-   Pass:
+    -   Retrieved text chunks
+    -   User query
+-   Generate response
+-   Include source attribution
+
+------------------------------------------------------------------------
+
+======================================== PHASE 2: API DEVELOPMENT
+(FASTAPI) ========================================
+
+1.  Core APIs
+
+-   POST /upload → Upload and process files
+-   POST /query → Ask questions
+-   GET /history → Retrieve chat history
+
+2.  Design Principles
+
+-   Modular architecture
+-   Separation of concerns
+-   Async endpoints for scalability
+
+------------------------------------------------------------------------
+
+======================================== PHASE 3: FRONTEND (STREAMLIT)
+========================================
+
+1.  Features
+
+-   File upload interface
+-   Chat interface
+-   Display answers + sources
+
+2.  UI Enhancements
+
+-   Multi-session support
+-   Chat history display
+
+------------------------------------------------------------------------
+
+======================================== PHASE 4: AUTHENTICATION & RBAC
+========================================
+
+1.  Authentication
+
+-   JWT-based login/signup
+-   Token generation and validation
+
+2.  OTP System
+
+-   Send OTP via SMTP (email)
+-   Verify user during signup/login
+
+3.  RBAC (Role-Based Access Control)
+
+-   Roles:
+    -   Admin, Manager, Analyst, Viewer, Guest
+-   File-level access control
+-   Role-based permissions
+
+------------------------------------------------------------------------
+
+======================================== PHASE 5: MEMORY MANAGEMENT
+========================================
+
+1.  Short-Term Memory
+
+-   Recent chat messages included in prompt
+
+2.  Long-Term Memory
+
+-   Store chat history in MySQL (JSON/text)
+
+3.  Optimization
+
+-   Summarize older conversations
+
+------------------------------------------------------------------------
+
+======================================== PHASE 6: TELEMETRY &
+OBSERVABILITY ========================================
+
+Track: - Token usage - Latency - Query count - Errors
+
+Tools: - Python logging - Optional: Prometheus / OpenTelemetry
+
+------------------------------------------------------------------------
+
+======================================== PHASE 7: PERFORMANCE
+OPTIMIZATION ========================================
+
+1.  Caching
+
+-   Use Redis for:
+    -   Query caching
+    -   Embedding caching
+
+2.  Async Processing
+
+-   Background tasks for file ingestion
+
+3.  Rate Limiting
+
+-   Prevent abuse
+
+------------------------------------------------------------------------
+
+======================================== PHASE 8: EVALUATION METRICS
+========================================
+
+-   Retrieval accuracy (precision/recall)
+-   Response relevance
+-   Latency tracking
+-   Cost estimation (tokens)
+
+------------------------------------------------------------------------
+
+======================================== PHASE 9: SECURITY
+========================================
+
+-   Input validation
+-   Secure token storage
+-   HTTPS communication
+-   Prevent prompt injection
+
+------------------------------------------------------------------------
+
+======================================== PHASE 10: DOCUMENTATION
+========================================
+
+-   Setup instructions
+-   Architecture diagram
+-   API documentation (Swagger)
+-   Design decisions
+
+------------------------------------------------------------------------
+
+======================================== FINAL NOTES
+========================================
+
+-   Do NOT pass embeddings to LLM, pass retrieved text
+-   Always include source attribution
+-   Keep system modular and scalable
+-   Follow clean coding practices

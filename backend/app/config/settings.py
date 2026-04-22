@@ -29,6 +29,9 @@ load_dotenv(dotenv_path=ENV_FILE, override=False)
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+DEFAULT_INGESTION_USERNAME = os.getenv("DEFAULT_INGESTION_USERNAME", "system_uploader")
+DEFAULT_INGESTION_EMAIL = os.getenv("DEFAULT_INGESTION_EMAIL", "system.uploader@gmail.com")
+DEFAULT_INGESTION_PASSWORD_HASH = os.getenv("DEFAULT_INGESTION_PASSWORD_HASH", "auth-not-enabled")
 
 
 def _build_database_url() -> str:
