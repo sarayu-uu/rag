@@ -8,13 +8,30 @@ File purpose:
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 
 _ZERO_WIDTH_PATTERN = re.compile(r"[\u200B-\u200D\uFEFF]")
 _DECORATIVE_LINE_PATTERN = re.compile(r"^[\s\-\_=*`~.]{4,}$")
+_LONG_SEPARATOR_PATTERN = re.compile(r"[\-=*_~#]{4,}")
+_BULLET_PREFIX_PATTERN = re.compile(r"^\s*(?:[-*•▪◦]+|\d+[.)])\s+")
 _MULTI_SPACE_PATTERN = re.compile(r"[ \t]+")
 _MULTI_NEWLINE_PATTERN = re.compile(r"\n{3,}")
+_NON_TEXT_SYMBOL_PATTERN = re.compile(r"[^\w\s.,:;!?()/'\"%-]")
+
+_REPLACEMENTS = {
+    "\u00A0": " ",
+    "â†’": " ",
+    "→": " ",
+    "â€“": "-",
+    "â€”": "-",
+    "–": "-",
+    "—": "-",
+    "•": " ",
+    "▪": " ",
+    "◦": " ",
+}
 
 
 def remove_noisy_formatting(text: str) -> str:
@@ -24,16 +41,23 @@ def remove_noisy_formatting(text: str) -> str:
     if not text:
         return ""
 
-    cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
-    cleaned = cleaned.replace("\u00A0", " ")
+    cleaned = unicodedata.normalize("NFKC", text)
+    cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
+    for old, new in _REPLACEMENTS.items():
+        cleaned = cleaned.replace(old, new)
     cleaned = _ZERO_WIDTH_PATTERN.sub("", cleaned)
+    cleaned = _LONG_SEPARATOR_PATTERN.sub("\n", cleaned)
 
     filtered_lines: list[str] = []
     for raw_line in cleaned.split("\n"):
-        line = raw_line.strip()
+        line = _BULLET_PREFIX_PATTERN.sub("", raw_line).strip()
         if _DECORATIVE_LINE_PATTERN.match(line):
             continue
-        filtered_lines.append(raw_line)
+        line = _NON_TEXT_SYMBOL_PATTERN.sub(" ", line)
+        line = _MULTI_SPACE_PATTERN.sub(" ", line).strip()
+        if not line:
+            continue
+        filtered_lines.append(line)
 
     return "\n".join(filtered_lines)
 

@@ -7,18 +7,21 @@ File purpose:
 from pathlib import Path
 from typing import Any, Union
 from urllib.parse import urlparse
+
 from .loaders import (
+    load_doc,
     load_pdf,
     load_pdf_sections,
     load_docx,
+    load_ppt,
     load_pptx,
     load_image,
     load_csv,
     load_json,
+    load_txt,
     load_xml,
     load_web,
 )
-from .text_cleaning import clean_sections, clean_text
 
 
 def load_file(file_path: Union[str, Path]) -> str:
@@ -28,8 +31,14 @@ def load_file(file_path: Union[str, Path]) -> str:
     if suffix == ".pdf":
         return load_pdf(file_path)
 
+    elif suffix == ".doc":
+        return load_doc(file_path)
+
     elif suffix == ".docx":
         return load_docx(file_path)
+
+    elif suffix == ".ppt":
+        return load_ppt(file_path)
 
     elif suffix == ".pptx":
         return load_pptx(file_path)
@@ -46,6 +55,9 @@ def load_file(file_path: Union[str, Path]) -> str:
     elif suffix == ".xml":
         return load_xml(file_path)
 
+    elif suffix == ".txt":
+        return load_txt(file_path)
+
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
 
@@ -56,34 +68,34 @@ def load_url(url: str) -> str:
         raise ValueError("Invalid URL. Please provide a full http/https URL.")
 
     try:
-        return clean_text(load_web(url))
+        return load_web(url)
     except Exception as exc:
         raise ValueError(f"Failed to load URL: {exc}") from exc
 
 
-def load_file_with_metadata(file_path: Union[str, Path]) -> dict[str, Any]:
+def load_file_with_metadata(
+    file_path: Union[str, Path],
+    *,
+    document_name: str | None = None,
+) -> dict[str, Any]:
     file_path = Path(file_path)
     suffix = file_path.suffix.lower()
 
     if suffix == ".pdf":
-        raw_sections = load_pdf_sections(file_path)
-        sections = clean_sections(
-            [
-                {"page_number": int(section["page_number"]), "text": str(section["text"])}
-                for section in raw_sections
-            ],
-            text_key="text",
-        )
+        sections = [
+            {"page_number": int(section["page_number"]), "text": str(section["text"])}
+            for section in load_pdf_sections(file_path)
+        ]
         text = "\n".join(section["text"] for section in sections)
         page_numbers = [section["page_number"] for section in sections if section["text"]]
     else:
-        text = clean_text(load_file(file_path))
+        text = load_file(file_path)
         page_numbers = []
 
     return {
         "text": text,
         "metadata": {
-            "document_name": file_path.name,
+            "document_name": document_name or file_path.name,
             "file_type": suffix.lstrip("."),
             "page_numbers": page_numbers,
         },
@@ -96,7 +108,7 @@ def load_url_with_metadata(url: str) -> dict[str, Any]:
         raise ValueError("Invalid URL. Please provide a full http/https URL.")
 
     try:
-        text = clean_text(load_web(url))
+        text = load_web(url)
     except Exception as exc:
         raise ValueError(f"Failed to load URL: {exc}") from exc
 
