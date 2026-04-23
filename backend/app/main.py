@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import CORS_ORIGINS
 from app.models.mysql import check_db_connection, init_db
+from app.routes.chat import router as chat_router
 from app.routes.ingestion_steps import router as ingestion_steps_router
 from app.routes.retrieval import router as retrieval_router
 from app.retrieval.chroma_store import vector_store_health
@@ -54,6 +55,7 @@ app.add_middleware(
 
 app.include_router(ingestion_steps_router)
 app.include_router(retrieval_router)
+app.include_router(chat_router)
 
 
 @app.get("/", tags=["system"])
