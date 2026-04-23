@@ -7,9 +7,12 @@ File purpose:
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
-from app.models.mysql import DocumentChunk
+from sqlalchemy import or_, select
+
+from app.models.mysql import DocumentChunk, SessionLocal
 from app.retrieval.embeddings import embed_query, embed_texts
 from app.retrieval.chroma_store import (
     delete_document_vectors,
@@ -96,3 +99,70 @@ def search_chunk_text(
         )
 
     return normalized_results
+
+
+def _tokenize_query(text: str) -> list[str]:
+    tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
+    return [token for token in tokens if len(token) >= 3]
+
+
+def keyword_search_chunk_text(
+    query: str,
+    *,
+    limit: int,
+    document_id: int | None = None,
+) -> list[dict[str, Any]]:
+    tokens = _tokenize_query(query)
+    if not tokens:
+        return []
+
+    filters = [DocumentChunk.content.ilike(f"%{token}%") for token in tokens]
+    statement = select(DocumentChunk).where(or_(*filters))
+    if document_id is not None:
+        statement = statement.where(DocumentChunk.document_id == int(document_id))
+
+    # Pull a broader candidate set, then score and trim in Python.
+    statement = statement.order_by(DocumentChunk.document_id.asc(), DocumentChunk.chunk_index.asc()).limit(limit * 10)
+
+    with SessionLocal() as db:
+        candidates = list(db.scalars(statement).all())
+
+    ranked: list[dict[str, Any]] = []
+    for chunk in candidates:
+        content = chunk.content or ""
+        lowered_content = content.lower()
+        matched_tokens = [token for token in tokens if token in lowered_content]
+        if not matched_tokens:
+            continue
+
+        # Higher overlap and tighter term density should rank better.
+        unique_matches = len(set(matched_tokens))
+        token_hits = sum(lowered_content.count(token) for token in set(matched_tokens))
+        score = unique_matches * 10 + token_hits
+
+        permissions_tags: list[str] = []
+        try:
+            parsed = json.loads(chunk.permissions_tags or "[]")
+            if isinstance(parsed, list):
+                permissions_tags = [tag for tag in parsed if isinstance(tag, str)]
+        except json.JSONDecodeError:
+            permissions_tags = []
+
+        ranked.append(
+            {
+                "id": str(chunk.id),
+                "score": float(score),
+                "document_id": int(chunk.document_id),
+                "chunk_index": int(chunk.chunk_index),
+                "page_number": chunk.page_number,
+                "owner_user_id": chunk.owner_user_id,
+                "source_name": chunk.source_name,
+                "permissions_tags": permissions_tags,
+                "content": content,
+                "retrieval_method": "keyword",
+                "keyword_overlap": unique_matches,
+            }
+        )
+
+    ranked.sort(key=lambda item: (-item["score"], item["document_id"], item["chunk_index"]))
+    return ranked[:limit]
