@@ -1,7 +1,7 @@
 """
 File purpose:
-- Exposes Phase 5 chat endpoints for grounded answer generation.
-- Supports both direct answer generation from supplied matches and full retrieval + generation.
+- Exposes Phase 5 and Phase 6 chat endpoints for grounded answer generation.
+- Supports both direct answer generation from supplied matches and global multi-document retrieval + generation.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def generate_answer_from_matches(payload: AnswerFromMatchesRequest) -> dict[str,
     }
 
 
-@router.post("/query", summary="Phase 5: Retrieve relevant chunks and generate a grounded answer")
+@router.post("/query", summary="Phase 6: Search across all indexed documents and generate a grounded answer")
 def chat_query(payload: ChatQueryRequest) -> dict[str, Any]:
     try:
         ensure_vector_store_ready()

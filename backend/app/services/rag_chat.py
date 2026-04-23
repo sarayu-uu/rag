@@ -6,6 +6,7 @@ File purpose:
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -20,6 +21,8 @@ RAG_SYSTEM_PROMPT = (
     "say that clearly. Do not invent facts. Include a short Sources section at the end "
     "that cites the source names and page numbers you used."
 )
+MAX_CONTEXT_CHARS = 12000
+OVERFETCH_MULTIPLIER = 3
 
 
 def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
@@ -74,6 +77,79 @@ def _build_sources(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sources
 
 
+def _summarize_documents(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[int, dict[str, Any]] = {}
+    for match in matches:
+        document_id = int(match["document_id"])
+        summary = grouped.setdefault(
+            document_id,
+            {
+                "document_id": document_id,
+                "source_name": match["source_name"],
+                "match_count": 0,
+                "pages": set(),
+                "best_score": match["score"],
+            },
+        )
+        summary["match_count"] += 1
+        if match["page_number"] is not None:
+            summary["pages"].add(match["page_number"])
+        summary["best_score"] = min(summary["best_score"], match["score"])
+
+    return [
+        {
+            "document_id": summary["document_id"],
+            "source_name": summary["source_name"],
+            "match_count": summary["match_count"],
+            "pages": sorted(summary["pages"]),
+            "best_score": summary["best_score"],
+        }
+        for summary in sorted(grouped.values(), key=lambda item: (item["best_score"], item["document_id"]))
+    ]
+
+
+def _select_multi_document_context(matches: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for match in matches:
+        grouped[int(match["document_id"])].append(match)
+
+    selected: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    current_context_chars = 0
+
+    # Round-robin selection spreads context across documents first.
+    ordered_document_ids = sorted(
+        grouped,
+        key=lambda document_id: min(item["score"] for item in grouped[document_id]),
+    )
+    while len(selected) < limit:
+        made_progress = False
+        for document_id in ordered_document_ids:
+            if not grouped[document_id]:
+                continue
+
+            candidate = grouped[document_id].pop(0)
+            if candidate["id"] in seen_ids:
+                continue
+
+            candidate_size = len(candidate["content"])
+            if selected and current_context_chars + candidate_size > MAX_CONTEXT_CHARS:
+                continue
+
+            selected.append(candidate)
+            seen_ids.add(candidate["id"])
+            current_context_chars += candidate_size
+            made_progress = True
+
+            if len(selected) >= limit:
+                break
+
+        if not made_progress:
+            break
+
+    return selected
+
+
 def answer_question_from_matches(question: str, matches: list[dict[str, Any]]) -> dict[str, Any]:
     cleaned_question = question.strip()
     if not cleaned_question:
@@ -108,6 +184,7 @@ def answer_question_from_matches(question: str, matches: list[dict[str, Any]]) -
     return {
         "answer": answer,
         "sources": _build_sources(usable_matches),
+        "documents_used": _summarize_documents(usable_matches),
         "match_count": len(usable_matches),
     }
 
@@ -117,7 +194,9 @@ def answer_question_with_retrieval(
     *,
     limit: int,
 ) -> dict[str, Any]:
-    matches = search_chunk_text(question, limit=limit)
-    result = answer_question_from_matches(question, matches)
-    result["matches"] = matches
+    raw_matches = search_chunk_text(question, limit=max(limit * OVERFETCH_MULTIPLIER, limit))
+    selected_matches = _select_multi_document_context(raw_matches, limit=limit)
+    result = answer_question_from_matches(question, selected_matches)
+    result["matches"] = selected_matches
+    result["retrieved_match_count"] = len(raw_matches)
     return result
