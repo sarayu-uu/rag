@@ -7,24 +7,37 @@ File purpose:
 from __future__ import annotations
 
 from collections import defaultdict
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.retrieval.service import keyword_search_chunk_text, search_chunk_text
 from app.services.chatgroq_bot import build_chat_model
 
-
-RAG_SYSTEM_PROMPT = (
-    "You are a retrieval-augmented assistant. Answer the user's question using only the "
-    "provided document context when it is relevant. If the answer is not in the context, "
-    "say that clearly. Do not invent facts. Include a short Sources section at the end "
-    "that cites the source names and page numbers you used."
-)
 MAX_CONTEXT_CHARS = 12000
 OVERFETCH_MULTIPLIER = 3
 SEMANTIC_WEIGHT = 0.65
 KEYWORD_WEIGHT = 0.35
+PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
+
+
+@lru_cache(maxsize=1)
+def _get_prompt_environment() -> Environment:
+    return Environment(
+        loader=FileSystemLoader(str(PROMPTS_DIR)),
+        undefined=StrictUndefined,
+        autoescape=False,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+
+def _render_prompt(template_name: str, **context: Any) -> str:
+    template = _get_prompt_environment().get_template(template_name)
+    return template.render(**context).strip()
 
 
 def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
@@ -39,28 +52,6 @@ def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
         "retrieval_method": str(match.get("retrieval_method", "semantic")),
         "rerank_score": float(match.get("rerank_score", 0.0)),
     }
-
-
-def _build_context(matches: list[dict[str, Any]]) -> str:
-    blocks: list[str] = []
-    for index, raw_match in enumerate(matches, start=1):
-        match = _normalize_match(raw_match, index)
-        page_label = match["page_number"] if match["page_number"] is not None else "unknown"
-        blocks.append(
-            "\n".join(
-                [
-                    f"[Source {index}]",
-                    f"source_name: {match['source_name']}",
-                    f"document_id: {match['document_id']}",
-                    f"chunk_index: {match['chunk_index']}",
-                    f"page_number: {page_label}",
-                    f"score: {match['score']}",
-                    "content:",
-                    match["content"],
-                ]
-            )
-        )
-    return "\n\n".join(blocks)
 
 
 def _build_sources(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -241,24 +232,23 @@ def answer_question_from_matches(question: str, matches: list[dict[str, Any]]) -
     usable_matches = [match for match in normalized_matches if match["content"]]
     if not usable_matches:
         return {
-            "answer": "I could not find any retrieved document context to answer that question.",
+            "answer": "The retrieved documents do not contain enough information to answer this confidently.",
             "sources": [],
+            "documents_used": [],
             "match_count": 0,
         }
 
-    prompt = "\n\n".join(
-        [
-            f"User question:\n{cleaned_question}",
-            "Retrieved document context:",
-            _build_context(usable_matches),
-            "Answer the question using only the retrieved context. If the answer is missing, say so.",
-        ]
+    system_prompt = _render_prompt("rag_system.jinja2")
+    user_prompt = _render_prompt(
+        "rag_user.jinja2",
+        question=cleaned_question,
+        matches=usable_matches,
     )
 
     response = build_chat_model().invoke(
         [
-            SystemMessage(content=RAG_SYSTEM_PROMPT),
-            HumanMessage(content=prompt),
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
         ]
     )
     answer = response.content if isinstance(response.content, str) else str(response.content)
