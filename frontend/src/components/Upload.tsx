@@ -1,7 +1,7 @@
 /**
  * File purpose:
  * - Renders file picker and upload button.
- * - Sends selected file to backend /upload and shows response.
+ * - Sends selected file to the one-step ingestion upload endpoint and shows response.
  */
 
 import { useState } from "react";
@@ -11,7 +11,12 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000
 type UploadResponse = {
   status: string;
   message: string;
-  text_preview: string;
+  document_id: number;
+  chunk_count: number;
+  vector_indexed: boolean;
+  vector_collection?: string;
+  raw_text_preview?: string;
+  cleaned_text_preview?: string;
   detail?: string;
 };
 
@@ -35,7 +40,7 @@ export default function Upload() {
     formData.append("file", file);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/upload`, {
+      const res = await fetch(`${API_BASE_URL}/ingestion/upload`, {
         method: "POST",
         body: formData,
       });
@@ -69,7 +74,11 @@ export default function Upload() {
         <div>
           <p><strong>Status:</strong> {result.status}</p>
           <p><strong>Message:</strong> {result.message}</p>
-          <pre>{result.text_preview}</pre>
+          <p><strong>Document ID:</strong> {result.document_id}</p>
+          <p><strong>Chunks:</strong> {result.chunk_count}</p>
+          <p><strong>Indexed In Chroma:</strong> {result.vector_indexed ? "Yes" : "No"}</p>
+          {result.vector_collection ? <p><strong>Collection:</strong> {result.vector_collection}</p> : null}
+          <pre>{result.cleaned_text_preview || result.raw_text_preview || ""}</pre>
         </div>
       ) : null}
     </section>

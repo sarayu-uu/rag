@@ -1,0 +1,133 @@
+"""
+File purpose:
+- Manages the Chroma client and collection lifecycle for chunk vectors.
+- Provides upsert, delete, search, and health helpers for Phase 4.
+"""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Any
+
+from app.config.settings import VECTOR_COLLECTION, VECTOR_SEARCH_LIMIT, VECTOR_STORE_PATH
+
+
+def _get_chroma_symbols():
+    try:
+        import chromadb
+    except ImportError as exc:
+        raise RuntimeError(
+            "chromadb is not installed. Run `pip install -r backend/requirements.txt`."
+        ) from exc
+    return chromadb
+
+
+@lru_cache(maxsize=1)
+def get_chroma_client():
+    chromadb = _get_chroma_symbols()
+    return chromadb.PersistentClient(path=VECTOR_STORE_PATH)
+
+
+def get_collection():
+    client = get_chroma_client()
+    return client.get_or_create_collection(
+        name=VECTOR_COLLECTION,
+        metadata={"hnsw:space": "cosine"},
+    )
+
+
+def ensure_collection() -> None:
+    get_collection()
+
+
+def vector_store_health() -> dict[str, str]:
+    try:
+        collection = get_collection()
+        collection.count()
+    except Exception as exc:
+        return {"status": "disconnected", "collection": VECTOR_COLLECTION, "detail": str(exc)}
+    return {"status": "connected", "collection": VECTOR_COLLECTION}
+
+
+def delete_document_vectors(document_id: int) -> None:
+    get_collection().delete(where={"document_id": int(document_id)})
+
+
+def upsert_chunk_vectors(records: list[dict[str, Any]]) -> None:
+    if not records:
+        return
+
+    collection = get_collection()
+    ids: list[str] = []
+    documents: list[str] = []
+    embeddings: list[list[float]] = []
+    metadatas: list[dict[str, Any]] = []
+
+    for record in records:
+        metadata = record["metadata"]
+        ids.append(str(record["id"]))
+        documents.append(str(record["document"]))
+        embeddings.append(record["embedding"])
+        metadatas.append(
+            {
+                "document_id": int(metadata["document_id"]),
+                "chunk_index": int(metadata["chunk_index"]),
+                "page_number": int(metadata["page_number"]),
+                "owner_user_id": int(metadata["owner_user_id"]),
+                "source_name": str(metadata["source_name"]),
+                "permissions_tags": str(metadata["permissions_tags"]),
+            }
+        )
+
+    collection.upsert(
+        ids=ids,
+        documents=documents,
+        embeddings=embeddings,
+        metadatas=metadatas,
+    )
+
+
+def search_vectors(
+    query_vector: list[float],
+    *,
+    limit: int | None = None,
+    document_id: int | None = None,
+) -> list[dict[str, Any]]:
+    collection = get_collection()
+
+    where = {"document_id": int(document_id)} if document_id is not None else None
+    results = collection.query(
+        query_embeddings=[query_vector],
+        n_results=limit or VECTOR_SEARCH_LIMIT,
+        where=where,
+        include=["documents", "metadatas", "distances"],
+    )
+
+    ids = results.get("ids", [[]])
+    documents = results.get("documents", [[]])
+    metadatas = results.get("metadatas", [[]])
+    distances = results.get("distances", [[]])
+
+    normalized_hits: list[dict[str, Any]] = []
+    for hit_id, document, metadata, distance in zip(
+        ids[0] if ids else [],
+        documents[0] if documents else [],
+        metadatas[0] if metadatas else [],
+        distances[0] if distances else [],
+        strict=True,
+    ):
+        metadata = metadata or {}
+        normalized_hits.append(
+            {
+                "id": str(hit_id),
+                "score": float(distance),
+                "document_id": int(metadata.get("document_id", 0)),
+                "chunk_index": int(metadata.get("chunk_index", 0)),
+                "page_number": int(metadata.get("page_number", -1)),
+                "owner_user_id": int(metadata.get("owner_user_id", -1)),
+                "source_name": str(metadata.get("source_name", "")),
+                "permissions_tags": str(metadata.get("permissions_tags", "[]")),
+                "content": str(document or ""),
+            }
+        )
+    return normalized_hits
