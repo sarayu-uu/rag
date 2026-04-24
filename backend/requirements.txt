@@ -14,9 +14,11 @@ pandas
 requests
 beautifulsoup4
 python-dotenv
+Jinja2
 langchain
 langchain-groq
-langchain-text-splitters
+chromadb
+fastembed
 sqlalchemy
 pymysql
 bcrypt

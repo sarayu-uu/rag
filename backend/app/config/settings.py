@@ -26,6 +26,10 @@ load_dotenv(dotenv_path=ENV_FILE, override=False)
 # MYSQL_DATABASE=ragdb
 # MYSQL_USER=root
 # MYSQL_PASSWORD=your_password_here
+# VECTOR_STORE_PATH=backend/chroma_db
+# VECTOR_COLLECTION=document_chunks
+# EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+# VECTOR_DIMENSION=384
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -59,7 +63,20 @@ def _build_database_url() -> str:
     )
 
 
+def _build_vector_store_path() -> str:
+    raw_path = os.getenv(
+        "VECTOR_STORE_PATH",
+        os.getenv("APP_MILVUS_URI", str(BASE_DIR / "backend" / "chroma_db")),
+    ).strip()
+    return str(Path(raw_path).expanduser().resolve())
+
+
 DATABASE_URL = _build_database_url()
+VECTOR_STORE_PATH = _build_vector_store_path()
+VECTOR_COLLECTION = os.getenv("VECTOR_COLLECTION", os.getenv("MILVUS_COLLECTION", "document_chunks"))
+VECTOR_SEARCH_LIMIT = int(os.getenv("VECTOR_SEARCH_LIMIT", os.getenv("MILVUS_SEARCH_LIMIT", "5")))
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+VECTOR_DIMENSION = int(os.getenv("VECTOR_DIMENSION", "384"))
 
 # Comma-separated list of allowed frontend origins for CORS.
 CORS_ORIGINS = [

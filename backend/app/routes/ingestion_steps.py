@@ -2,6 +2,7 @@
 File purpose:
 - Exposes step-by-step ingestion endpoints for debugging and demo in Swagger.
 - Steps: load (raw extraction), clean (text cleaning), chunk (chunk generation).
+- Also provides a one-step upload flow that stores chunks in MySQL and Chroma.
 """
 
 from __future__ import annotations
@@ -23,8 +24,6 @@ from app.ingestion.chunking import (
     ChunkingConfig,
     chunk_sections,
     chunk_text,
-    semantic_chunk_sections,
-    semantic_chunk_text,
 )
 from app.ingestion.document_record import (
     build_document_record_payload,
@@ -40,6 +39,7 @@ from app.ingestion.validators import (
     validate_file_type,
 )
 from app.models.mysql import Document, DocumentStatus, get_db, get_or_create_default_ingestion_user
+from app.retrieval.service import sync_document_chunks_to_vector_store
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion-steps"])
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -56,7 +56,6 @@ class ChunkTextRequest(BaseModel):
     source_name: str = Field(default="", description="Optional source label stored with each chunk.")
     owner_user_id: int | None = Field(default=None, description="Optional owner id stored with each chunk.")
     permissions_tags: list[str] = Field(default_factory=list, description="Optional permission tags for chunk metadata.")
-    chunking_strategy: str = Field(default="recursive", description="Choose 'recursive' or 'semantic' chunking.")
     chunk_size: int = Field(default=500, description="Maximum chunk length before splitting.")
     chunk_overlap: int = Field(default=100, description="Character overlap between adjacent chunks.")
 
@@ -97,13 +96,6 @@ def _validate_chunk_form_inputs(chunk_size: int, chunk_overlap: int) -> Chunking
     if chunk_overlap >= chunk_size:
         raise HTTPException(status_code=400, detail="chunk_overlap must be smaller than chunk_size.")
     return ChunkingConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-
-
-def _resolve_chunking_strategy(strategy: str) -> str:
-    normalized = strategy.strip().lower()
-    if normalized not in {"recursive", "semantic"}:
-        raise HTTPException(status_code=400, detail="chunking_strategy must be 'recursive' or 'semantic'.")
-    return normalized
 
 
 def _parse_permissions_tags(raw_value: str | None) -> list[str]:
@@ -149,18 +141,8 @@ def _chunk_cleaned_text(
     owner_user_id: int | None,
     permissions_tags: list[str],
     config: ChunkingConfig,
-    strategy: str,
 ) -> list[dict[str, Any]]:
     validate_extracted_content(cleaned_text)
-    if strategy == "semantic":
-        return semantic_chunk_text(
-            cleaned_text,
-            document_id=document_id,
-            source_name=source_name,
-            owner_user_id=owner_user_id,
-            permissions_tags=permissions_tags,
-            config=config,
-        )
     return chunk_text(
         cleaned_text,
         document_id=document_id,
@@ -178,7 +160,6 @@ def _chunk_pdf_document(
     owner_user_id: int | None,
     permissions_tags: list[str],
     config: ChunkingConfig,
-    strategy: str,
 ) -> list[dict[str, Any]]:
     sections = [
         {
@@ -191,15 +172,6 @@ def _chunk_pdf_document(
     if not sections:
         raise ValueError("No meaningful text could be extracted from this PDF.")
 
-    if strategy == "semantic":
-        return semantic_chunk_sections(
-            sections,
-            document_id=document.id,
-            source_name=source_name,
-            owner_user_id=owner_user_id,
-            permissions_tags=permissions_tags,
-            config=config,
-        )
     return chunk_sections(
         sections,
         document_id=document.id,
@@ -218,7 +190,6 @@ def _build_chunks_for_document(
     owner_user_id: int | None,
     permissions_tags: list[str],
     config: ChunkingConfig,
-    strategy: str,
 ) -> list[dict[str, Any]]:
     if document.file_type.lower() == "pdf" and Path(document.storage_path).exists():
         return _chunk_pdf_document(
@@ -227,7 +198,6 @@ def _build_chunks_for_document(
             owner_user_id=owner_user_id,
             permissions_tags=permissions_tags,
             config=config,
-            strategy=strategy,
         )
 
     return _chunk_cleaned_text(
@@ -237,7 +207,6 @@ def _build_chunks_for_document(
         owner_user_id=owner_user_id,
         permissions_tags=permissions_tags,
         config=config,
-        strategy=strategy,
     )
 
 
@@ -265,8 +234,21 @@ def _serialize_chunks(chunks: list[Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _index_saved_chunks(document_id: int, saved_chunks: list[Any]) -> dict[str, Any]:
+    try:
+        return sync_document_chunks_to_vector_store(saved_chunks)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"Document {document_id} was saved in MySQL, but Chroma indexing failed: {exc}. "
+                "Use /retrieval/reindex/{document_id} after fixing the vector-store issue."
+            ),
+        ) from exc
+
+
 @router.post("/load", summary="Step 1: Load input and extract raw text")
-async def step_load(
+def step_load(
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
     db: Session = Depends(get_db),
@@ -362,20 +344,46 @@ async def step_load(
     }
 
 
-@router.post("/uploadtochunk", summary="Step 1 to 3: Load, clean, and chunk in one request")
-async def upload_to_chunk(
+def _build_upload_response(
+    *,
+    document: Document,
+    source: str,
+    metadata: dict[str, Any],
+    raw_text: str,
+    cleaned_text: str,
+    saved_chunks: list[Any],
+    vector_collection: str | None = None,
+    vector_indexed: bool = False,
+) -> dict[str, Any]:
+    return {
+        "status": "success",
+        "source": source,
+        "document_id": document.id,
+        "upload_user_id": document.upload_user_id,
+        "metadata": metadata,
+        "raw_text_preview": raw_text[:1200],
+        "cleaned_text_preview": cleaned_text[:1200],
+        "chunking_strategy": "fixed",
+        "chunk_count": len(saved_chunks),
+        "vector_indexed": vector_indexed,
+        "vector_collection": vector_collection,
+        "chunks": _serialize_chunks(saved_chunks),
+    }
+
+
+def _run_upload_pipeline(
+    *,
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
     permissions_tags: str | None = Form(default=None),
-    chunking_strategy: str = Form(default="recursive"),
     chunk_size: int = Form(default=500),
     chunk_overlap: int = Form(default=100),
     db: Session = Depends(get_db),
+    index_in_vector_store: bool,
 ) -> dict[str, Any]:
     url = _normalize_url_input(url)
     _single_input_guard(file, url)
     config = _validate_chunk_form_inputs(chunk_size, chunk_overlap)
-    strategy = _resolve_chunking_strategy(chunking_strategy)
     parsed_permissions_tags = _parse_permissions_tags(permissions_tags)
     default_user = get_or_create_default_ingestion_user(db)
 
@@ -405,7 +413,6 @@ async def upload_to_chunk(
                 owner_user_id=document.upload_user_id,
                 permissions_tags=parsed_permissions_tags,
                 config=config,
-                strategy=strategy,
             )
             saved_chunks = replace_document_chunks(db, document_id=document.id, chunks=chunks)
             document.status = DocumentStatus.PROCESSED
@@ -421,19 +428,31 @@ async def upload_to_chunk(
                 detail="Failed to complete the load-clean-chunk pipeline for the URL.",
             ) from exc
 
-        return {
-            "status": "success",
-            "message": "Load, cleaning, and chunking completed.",
-            "source": "url",
-            "document_id": document.id,
-            "upload_user_id": document.upload_user_id,
-            "metadata": metadata,
-            "raw_text_preview": raw_text[:1200],
-            "cleaned_text_preview": cleaned_text[:1200],
-            "chunking_strategy": strategy,
-            "chunk_count": len(saved_chunks),
-            "chunks": _serialize_chunks(saved_chunks),
-        }
+        if index_in_vector_store:
+            index_result = _index_saved_chunks(document.id, saved_chunks)
+            response = _build_upload_response(
+                document=document,
+                source="url",
+                metadata=metadata,
+                raw_text=raw_text,
+                cleaned_text=cleaned_text,
+                saved_chunks=saved_chunks,
+                vector_collection=index_result.get("collection"),
+                vector_indexed=True,
+            )
+            response["message"] = "Load, cleaning, chunking, and Chroma indexing completed."
+            return response
+
+        response = _build_upload_response(
+            document=document,
+            source="url",
+            metadata=metadata,
+            raw_text=raw_text,
+            cleaned_text=cleaned_text,
+            saved_chunks=saved_chunks,
+        )
+        response["message"] = "Load, cleaning, and chunking completed."
+        return response
 
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="No file received.")
@@ -465,7 +484,6 @@ async def upload_to_chunk(
             owner_user_id=document.upload_user_id,
             permissions_tags=parsed_permissions_tags,
             config=config,
-            strategy=strategy,
         )
         saved_chunks = replace_document_chunks(db, document_id=document.id, chunks=chunks)
         document.status = DocumentStatus.PROCESSED
@@ -481,27 +499,81 @@ async def upload_to_chunk(
             detail="Failed to complete the load-clean-chunk pipeline for the file.",
         ) from exc
 
-    return {
-        "status": "success",
-        "message": "Load, cleaning, and chunking completed.",
-        "source": "file",
-        "document_id": document.id,
-        "upload_user_id": document.upload_user_id,
-        "metadata": {
-            **metadata,
-            "stored_as": safe_name,
-            "size_bytes": file_size,
-        },
-        "raw_text_preview": raw_text[:1200],
-        "cleaned_text_preview": cleaned_text[:1200],
-        "chunking_strategy": strategy,
-        "chunk_count": len(saved_chunks),
-        "chunks": _serialize_chunks(saved_chunks),
+    final_metadata = {
+        **metadata,
+        "stored_as": safe_name,
+        "size_bytes": file_size,
     }
+
+    if index_in_vector_store:
+        index_result = _index_saved_chunks(document.id, saved_chunks)
+        response = _build_upload_response(
+            document=document,
+            source="file",
+            metadata=final_metadata,
+            raw_text=raw_text,
+            cleaned_text=cleaned_text,
+            saved_chunks=saved_chunks,
+            vector_collection=index_result.get("collection"),
+            vector_indexed=True,
+        )
+        response["message"] = "Load, cleaning, chunking, and Chroma indexing completed."
+        return response
+
+    response = _build_upload_response(
+        document=document,
+        source="file",
+        metadata=final_metadata,
+        raw_text=raw_text,
+        cleaned_text=cleaned_text,
+        saved_chunks=saved_chunks,
+    )
+    response["message"] = "Load, cleaning, and chunking completed."
+    return response
+
+
+@router.post("/uploadtochunk", summary="Step 1 to 3: Load, clean, and chunk in one request")
+def upload_to_chunk(
+    file: UploadFile | None = File(default=None),
+    url: str | None = Form(default=None),
+    permissions_tags: str | None = Form(default=None),
+    chunk_size: int = Form(default=500),
+    chunk_overlap: int = Form(default=100),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return _run_upload_pipeline(
+        file=file,
+        url=url,
+        permissions_tags=permissions_tags,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        db=db,
+        index_in_vector_store=False,
+    )
+
+
+@router.post("/upload", summary="Default upload: store document, chunks, and vectors automatically")
+def upload_document(
+    file: UploadFile | None = File(default=None),
+    url: str | None = Form(default=None),
+    permissions_tags: str | None = Form(default=None),
+    chunk_size: int = Form(default=500),
+    chunk_overlap: int = Form(default=100),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    return _run_upload_pipeline(
+        file=file,
+        url=url,
+        permissions_tags=permissions_tags,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        db=db,
+        index_in_vector_store=True,
+    )
 
 
 @router.post("/clean", summary="Step 2: Clean and normalize extracted text")
-async def step_clean(
+def step_clean(
     payload: CleanTextRequest,
 ) -> dict[str, Any]:
     cleaned = clean_text(payload.text)
@@ -517,12 +589,11 @@ async def step_clean(
 
 
 @router.post("/chunk", summary="Step 3: Chunk cleaned text with metadata")
-async def step_chunk(
+def step_chunk(
     payload: ChunkTextRequest,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     config = _validate_chunk_form_inputs(payload.chunk_size, payload.chunk_overlap)
-    strategy = _resolve_chunking_strategy(payload.chunking_strategy)
     document = _get_document_or_404(db, payload.document_id)
     source_name = payload.source_name.strip() or document.title
     owner_user_id = payload.owner_user_id if payload.owner_user_id is not None else document.upload_user_id
@@ -535,9 +606,9 @@ async def step_chunk(
             owner_user_id=owner_user_id,
             permissions_tags=payload.permissions_tags,
             config=config,
-            strategy=strategy,
         )
         saved_chunks = replace_document_chunks(db, document_id=document.id, chunks=chunks)
+        document.status = DocumentStatus.PROCESSED
         db.commit()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -548,13 +619,17 @@ async def step_chunk(
             detail="Failed to persist document chunks in MySQL.",
         ) from exc
 
+    index_result = _index_saved_chunks(document.id, saved_chunks)
+
     return {
         "status": "success",
-        "message": "Chunking completed and chunks stored in MySQL.",
+        "message": "Chunking completed, stored in MySQL, and indexed in Chroma.",
         "source": "text",
         "document_id": document.id,
-        "chunking_strategy": strategy,
+        "chunking_strategy": "fixed",
         "chunk_count": len(saved_chunks),
+        "vector_indexed": True,
+        "vector_collection": index_result.get("collection"),
         "cleaned_text_preview": payload.text[:1200],
         "chunks": _serialize_chunks(saved_chunks),
     }
