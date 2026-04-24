@@ -223,7 +223,12 @@ def _rerank_hybrid_matches(
     return reranked
 
 
-def answer_question_from_matches(question: str, matches: list[dict[str, Any]]) -> dict[str, Any]:
+def answer_question_from_matches(
+    question: str,
+    matches: list[dict[str, Any]],
+    *,
+    memory_context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     cleaned_question = question.strip()
     if not cleaned_question:
         raise ValueError("question must not be empty.")
@@ -243,6 +248,7 @@ def answer_question_from_matches(question: str, matches: list[dict[str, Any]]) -
         "rag_user.jinja2",
         question=cleaned_question,
         matches=usable_matches,
+        memory_context=memory_context or {},
     )
 
     response = build_chat_model().invoke(
@@ -265,13 +271,18 @@ def answer_question_with_retrieval(
     question: str,
     *,
     limit: int,
+    memory_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     candidate_limit = max(limit * OVERFETCH_MULTIPLIER, limit)
     semantic_matches = search_chunk_text(question, limit=candidate_limit)
     keyword_matches = keyword_search_chunk_text(question, limit=candidate_limit)
     reranked_matches = _rerank_hybrid_matches(semantic_matches, keyword_matches)
     selected_matches = _select_multi_document_context(reranked_matches, limit=limit)
-    result = answer_question_from_matches(question, selected_matches)
+    result = answer_question_from_matches(
+        question,
+        selected_matches,
+        memory_context=memory_context,
+    )
     result["matches"] = selected_matches
     result["retrieved_match_count"] = len(reranked_matches)
     result["retrieval_debug"] = {
