@@ -36,6 +36,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 DEFAULT_INGESTION_USERNAME = os.getenv("DEFAULT_INGESTION_USERNAME", "system_uploader")
 DEFAULT_INGESTION_EMAIL = os.getenv("DEFAULT_INGESTION_EMAIL", "system.uploader@gmail.com")
 DEFAULT_INGESTION_PASSWORD_HASH = os.getenv("DEFAULT_INGESTION_PASSWORD_HASH", "auth-not-enabled")
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-backend-env")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
 
 def _build_database_url() -> str:
