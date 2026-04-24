@@ -1,3 +1,17 @@
+{% if memory_context.older_summary or memory_context.recent_messages %}
+Conversation memory:
+{% if memory_context.older_summary %}
+Older summary:
+{{ memory_context.older_summary }}
+{% endif %}
+{% if memory_context.recent_messages %}
+Recent messages:
+{% for message in memory_context.recent_messages %}
+- {{ message.role }}: {{ message.content }}
+{% endfor %}
+{% endif %}
+
+{% endif %}
 User question:
 {{ question }}
 

@@ -67,15 +67,15 @@ class DocumentStatus(str, PyEnum):
 
 
 class SessionStatus(str, PyEnum):
-    ACTIVE = "active"
-    CLOSED_LIMIT = "closed_limit"
-    CLOSED_MANUAL = "closed_manual"
+    ACTIVE = "ACTIVE"
+    CLOSED_LIMIT = "CLOSED_LIMIT"
+    CLOSED_MANUAL = "CLOSED_MANUAL"
 
 
 class MessageRole(str, PyEnum):
-    SYSTEM = "system"
-    USER = "user"
-    ASSISTANT = "assistant"
+    SYSTEM = "SYSTEM"
+    USER = "USER"
+    ASSISTANT = "ASSISTANT"
 
 
 class RequestType(str, PyEnum):
