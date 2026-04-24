@@ -3,14 +3,9 @@ import DummyAuthPage from "./components/auth/DummyAuthPage";
 import IngestionPanel from "./components/ingestion/IngestionPanel";
 import ChatWindow from "./components/chat/ChatWindow";
 import ChatComposer from "./components/chat/ChatComposer";
-import HistoryInspector from "./components/chat/HistoryInspector";
 import WorkspaceSidebar from "./components/layout/WorkspaceSidebar";
 import DocumentsPanel from "./components/panels/DocumentsPanel";
 import DummyTablePanel from "./components/panels/DummyTablePanel";
-import SuperAdminHome from "./components/roles/super_admin/SuperAdminHome";
-import AdminHome from "./components/roles/admin/AdminHome";
-import EditorHome from "./components/roles/editor/EditorHome";
-import ViewerHome from "./components/roles/viewer/ViewerHome";
 import { getSessionMessages, listSessions, queryChat } from "./lib/api";
 import { getRoleDefinition, ROLE_KEYS } from "./lib/roles";
 
@@ -55,21 +50,18 @@ export default function App() {
   const [error, setError] = useState("");
 
   const [activeSessionId, setActiveSessionId] = useState(null);
-  const [sessionPayload, setSessionPayload] = useState(null);
   const [messages, setMessages] = useState([]);
   const [sessionInfo, setSessionInfo] = useState(null);
   const [lastQueryInfo, setLastQueryInfo] = useState(null);
-  const [activeTab, setActiveTab] = useState("history");
+  const [activeView, setActiveView] = useState("chat");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [indexedDocuments, setIndexedDocuments] = useState([]);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.session_id === activeSessionId) || null,
     [sessions, activeSessionId]
   );
-  const roleDefinition = useMemo(
-    () => getRoleDefinition(user?.role),
-    [user]
-  );
+  const roleDefinition = useMemo(() => getRoleDefinition(user?.role), [user]);
 
   async function refreshSessions() {
     setSessionsLoading(true);
@@ -89,12 +81,12 @@ export default function App() {
     try {
       const data = await getSessionMessages(sessionId);
       setActiveSessionId(sessionId);
-      setSessionPayload(data);
       setSessionInfo({
         session_id: data.session_id,
         created: false,
       });
       setMessages(data.messages || []);
+      setActiveView("chat");
     } catch (loadError) {
       setError(loadError.message || "Failed to load session messages.");
     } finally {
@@ -104,11 +96,11 @@ export default function App() {
 
   function startNewChat() {
     setActiveSessionId(null);
-    setSessionPayload(null);
     setSessionInfo(null);
     setMessages([]);
     setLastQueryInfo(null);
     setError("");
+    setActiveView("chat");
   }
 
   function handleRoleSubmit() {
@@ -119,7 +111,7 @@ export default function App() {
       role: authForm.role,
       roleLabel: roleMeta.label,
     });
-    setActiveTab("history");
+    setActiveView("chat");
     refreshSessions();
   }
 
@@ -134,9 +126,8 @@ export default function App() {
     setUser(null);
     setMessages([]);
     setSessionInfo(null);
-    setSessionPayload(null);
     setActiveSessionId(null);
-    setActiveTab("history");
+    setActiveView("chat");
   }
 
   function handleIngestionIndexed(result) {
@@ -160,7 +151,6 @@ export default function App() {
     if (records.length > 0) {
       setIndexedDocuments((previous) => [...records, ...previous]);
     }
-    refreshSessions();
   }
 
   async function handleSend(question, limit) {
@@ -210,44 +200,36 @@ export default function App() {
     }
   }, [user]);
 
-  function renderRoleHome() {
-    if (!user) {
-      return null;
-    }
-
-    switch (user.role) {
-      case ROLE_KEYS.SUPER_ADMIN:
-        return <SuperAdminHome />;
-      case ROLE_KEYS.ADMIN:
-        return <AdminHome />;
-      case ROLE_KEYS.EDITOR:
-        return <EditorHome />;
-      case ROLE_KEYS.VIEWER:
-      default:
-        return <ViewerHome />;
-    }
-  }
-
-  function renderRightPanel() {
-    if (!user) {
-      return null;
-    }
-
-    if (activeTab === "history") {
-      return <HistoryInspector activeSessionId={activeSessionId} sessionPayload={sessionPayload} />;
-    }
-    if (activeTab === "documents") {
-      return <DocumentsPanel documents={indexedDocuments} />;
-    }
-    if (activeTab === "ingestion") {
+  function renderMainContent() {
+    if (activeView === "chat") {
       return (
-        <div className="right-stack">
-          {renderRoleHome()}
-          <IngestionPanel onIndexed={handleIngestionIndexed} />
-        </div>
+        <>
+          <header className="workspace-chat-header panel">
+            <h1>New chat</h1>
+            <p>{user.roleLabel} | {roleDefinition.description}</p>
+            {error ? <p className="error-banner">{error}</p> : null}
+          </header>
+          <ChatWindow
+            sessionInfo={sessionInfo || (activeSession ? { session_id: activeSession.session_id } : null)}
+            messages={messages}
+            loadingMessages={messagesLoading}
+            sending={sending}
+            lastQueryInfo={lastQueryInfo}
+          />
+          <ChatComposer disabled={sending} onSend={handleSend} />
+        </>
       );
     }
-    if (activeTab === "users") {
+
+    if (activeView === "documents") {
+      return <DocumentsPanel documents={indexedDocuments} />;
+    }
+
+    if (activeView === "ingestion") {
+      return <IngestionPanel onIndexed={handleIngestionIndexed} />;
+    }
+
+    if (activeView === "users") {
       return (
         <DummyTablePanel
           title="Users"
@@ -256,7 +238,8 @@ export default function App() {
         />
       );
     }
-    if (activeTab === "roles") {
+
+    if (activeView === "roles") {
       return (
         <DummyTablePanel
           title="Role Catalog"
@@ -265,7 +248,8 @@ export default function App() {
         />
       );
     }
-    if (activeTab === "permissions") {
+
+    if (activeView === "permissions") {
       return (
         <DummyTablePanel
           title="Permissions"
@@ -274,7 +258,8 @@ export default function App() {
         />
       );
     }
-    if (activeTab === "analytics") {
+
+    if (activeView === "analytics") {
       return (
         <DummyTablePanel
           title="Analytics"
@@ -284,7 +269,7 @@ export default function App() {
       );
     }
 
-    return <HistoryInspector activeSessionId={activeSessionId} sessionPayload={sessionPayload} />;
+    return null;
   }
 
   if (!user) {
@@ -300,40 +285,26 @@ export default function App() {
   }
 
   return (
-    <main className="workspace-shell">
+    <main className={`workspace-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <WorkspaceSidebar
         user={user}
-        activeTab={activeTab}
+        collapsed={sidebarCollapsed}
+        activeView={activeView}
         tabs={roleDefinition.tabs}
         sessions={sessions}
         activeSessionId={activeSessionId}
         sessionsLoading={sessionsLoading}
-        onTabChange={setActiveTab}
+        onViewChange={setActiveView}
+        onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
         onStartNewChat={startNewChat}
         onRefreshSessions={refreshSessions}
         onSelectSession={loadSession}
         onLogout={handleLogout}
       />
 
-      <section className="workspace-chat">
-        <header className="workspace-chat-header panel">
-          <h1>Q&A Console</h1>
-          <p>
-            Logged in as {user.roleLabel} | Role scope: {roleDefinition.description}
-          </p>
-          {error ? <p className="error-banner">{error}</p> : null}
-        </header>
-        <ChatWindow
-          sessionInfo={sessionInfo || (activeSession ? { session_id: activeSession.session_id } : null)}
-          messages={messages}
-          loadingMessages={messagesLoading}
-          sending={sending}
-          lastQueryInfo={lastQueryInfo}
-        />
-        <ChatComposer disabled={sending} onSend={handleSend} />
+      <section className={`workspace-main ${activeView === "chat" ? "" : "single-view"}`}>
+        {renderMainContent()}
       </section>
-
-      <aside className="workspace-right">{renderRightPanel()}</aside>
     </main>
   );
 }

@@ -15,7 +15,7 @@ export const ROLE_DEFINITIONS = {
       "Approve sensitive permission grants and revoke emergency access.",
       "Monitor platform-wide ingestion, retrieval, and model usage health.",
     ],
-    tabs: ["chat", "documents", "ingestion", "users", "roles", "permissions", "analytics"],
+    tabs: ["documents", "ingestion", "users", "permissions", "analytics"],
   },
   [ROLE_KEYS.ADMIN]: {
     label: "Admin",
@@ -26,7 +26,7 @@ export const ROLE_DEFINITIONS = {
       "Assign document-level query/edit permissions for business teams.",
       "Track usage analytics and escalate anomalies to Super Admin.",
     ],
-    tabs: ["chat", "documents", "ingestion", "users", "permissions", "analytics"],
+    tabs: ["documents", "ingestion", "users", "permissions", "analytics"],
   },
   [ROLE_KEYS.EDITOR]: {
     label: "Editor",
@@ -37,7 +37,7 @@ export const ROLE_DEFINITIONS = {
       "Validate chunk quality and resolve ingestion failures for owned docs.",
       "Maintain permission tags and source labels for retrievable context.",
     ],
-    tabs: ["chat", "documents", "ingestion"],
+    tabs: ["documents", "ingestion"],
   },
   [ROLE_KEYS.VIEWER]: {
     label: "Viewer",
@@ -48,7 +48,7 @@ export const ROLE_DEFINITIONS = {
       "Flag unclear or low-confidence responses back to Editors/Admins.",
       "Cannot upload, re-index, or change permissions.",
     ],
-    tabs: ["chat", "documents"],
+    tabs: ["documents"],
   },
 };
 
