@@ -1,13 +1,13 @@
 """
 File purpose:
-- Exposes lightweight auth endpoints for signup, verification, login, refresh, and me.
-- Uses JWT plus a development OTP flow so frontend work can start before full email delivery.
+- Exposes Phase 13 auth endpoints for signup, verification, login, refresh, and me.
+- Uses JWT plus a development OTP flow so the app can operate before SMTP is added.
 """
 
 from __future__ import annotations
 
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -29,6 +29,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 OTP_STORE: dict[str, dict[str, Any]] = {}
 DEFAULT_SIGNUP_ROLE = RoleName.VIEWER
+OTP_EXPIRY_MINUTES = 10
 
 
 class SignupRequest(BaseModel):
@@ -91,7 +92,7 @@ def _get_user_by_email(db: Session, email: str) -> User | None:
     )
 
 
-@router.post("/signup", summary="Phase 12: Register a user and issue a development OTP")
+@router.post("/signup", summary="Phase 13: Register a user and issue a development OTP")
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     normalized_email = _normalize_email(payload.email)
     existing_by_email = _get_user_by_email(db, normalized_email)
@@ -120,6 +121,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
         "otp": otp,
         "user_id": user.id,
         "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES)).isoformat(),
     }
 
     return {
@@ -128,15 +130,23 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
         "user": _serialize_user(user),
         "otp_delivery": "development_inline",
         "otp": otp,
+        "otp_expires_in_minutes": OTP_EXPIRY_MINUTES,
     }
 
 
-@router.post("/verify-otp", summary="Phase 12: Verify a signup OTP and activate the account")
+@router.post("/verify-otp", summary="Phase 13: Verify a signup OTP and activate the account")
 def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     email = _normalize_email(payload.email)
     record = OTP_STORE.get(email)
     if record is None or record.get("otp") != payload.otp.strip():
         raise HTTPException(status_code=400, detail="Invalid OTP.")
+
+    expires_at_raw = record.get("expires_at")
+    if expires_at_raw:
+        expires_at = datetime.fromisoformat(str(expires_at_raw))
+        if datetime.now(timezone.utc) > expires_at:
+            OTP_STORE.pop(email, None)
+            raise HTTPException(status_code=400, detail="OTP expired. Sign up again to request a fresh code.")
 
     user = db.get(User, int(record["user_id"]))
     if user is None:
@@ -154,7 +164,7 @@ def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict
     }
 
 
-@router.post("/login", summary="Phase 12: Authenticate a verified user and issue JWTs")
+@router.post("/login", summary="Phase 13: Authenticate a verified user and issue JWTs")
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     user = _get_user_by_email(db, _normalize_email(payload.email))
     if user is None or not verify_password(payload.password, user.password_hash):
@@ -171,7 +181,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any
     }
 
 
-@router.post("/refresh", summary="Phase 12: Exchange a refresh token for a new access token")
+@router.post("/refresh", summary="Phase 13: Exchange a refresh token for a new access token")
 def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     token_payload = decode_token(payload.refresh_token)
     if token_payload.get("type") != "refresh":
@@ -189,11 +199,12 @@ def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)) -> dic
     return {
         "status": "success",
         "access_token": create_access_token(user),
+        "refresh_token": create_refresh_token(user),
         "token_type": "bearer",
     }
 
 
-@router.get("/me", summary="Phase 12: Get the authenticated user profile")
+@router.get("/me", summary="Phase 13: Get the authenticated user profile")
 def get_me(current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     return {
         "status": "success",

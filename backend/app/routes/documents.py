@@ -13,7 +13,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.models.mysql import Document, DocumentChunk, get_db
+from app.auth.security import get_current_user, is_privileged_user
+from app.models.mysql import Document, DocumentChunk, User, get_db
 from app.retrieval.service import clear_document_vectors
 from app.routes.ingestion_steps import _run_upload_pipeline
 
@@ -34,13 +35,22 @@ def _serialize_document(document: Document, chunk_count: int) -> dict[str, Any]:
     }
 
 
-def _get_document_with_chunk_count(db: Session, document_id: int) -> tuple[Document, int] | None:
-    row = db.execute(
+def _get_document_with_chunk_count(
+    db: Session,
+    document_id: int,
+    *,
+    current_user: User,
+) -> tuple[Document, int] | None:
+    statement = (
         select(Document, func.count(DocumentChunk.id))
         .outerjoin(DocumentChunk, DocumentChunk.document_id == Document.id)
         .where(Document.id == document_id)
         .group_by(Document.id)
-    ).first()
+    )
+    if not is_privileged_user(current_user):
+        statement = statement.where(Document.upload_user_id == current_user.id)
+
+    row = db.execute(statement).first()
     if row is None:
         return None
     return row[0], int(row[1] or 0)
@@ -54,6 +64,7 @@ def upload_document(
     chunk_size: int = Form(default=500),
     chunk_overlap: int = Form(default=100),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     return _run_upload_pipeline(
         file=file,
@@ -63,17 +74,25 @@ def upload_document(
         chunk_overlap=chunk_overlap,
         db=db,
         index_in_vector_store=True,
+        upload_user=current_user,
     )
 
 
 @router.get("", summary="Phase 12: List stored documents")
-def list_documents(db: Session = Depends(get_db)) -> dict[str, Any]:
-    rows = db.execute(
+def list_documents(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    statement = (
         select(Document, func.count(DocumentChunk.id))
         .outerjoin(DocumentChunk, DocumentChunk.document_id == Document.id)
         .group_by(Document.id)
         .order_by(Document.uploaded_at.desc(), Document.id.desc())
-    ).all()
+    )
+    if not is_privileged_user(current_user):
+        statement = statement.where(Document.upload_user_id == current_user.id)
+
+    rows = db.execute(statement).all()
 
     documents = [_serialize_document(document, int(chunk_count or 0)) for document, chunk_count in rows]
     return {
@@ -84,8 +103,12 @@ def list_documents(db: Session = Depends(get_db)) -> dict[str, Any]:
 
 
 @router.get("/{document_id}", summary="Phase 12: Get one stored document")
-def get_document(document_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
-    payload = _get_document_with_chunk_count(db, document_id)
+def get_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    payload = _get_document_with_chunk_count(db, document_id, current_user=current_user)
     if payload is None:
         raise HTTPException(status_code=404, detail=f"Document {document_id} was not found.")
 
@@ -97,8 +120,12 @@ def get_document(document_id: int, db: Session = Depends(get_db)) -> dict[str, A
 
 
 @router.delete("/{document_id}", summary="Phase 12: Delete a stored document and its vectors")
-def delete_document(document_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
-    payload = _get_document_with_chunk_count(db, document_id)
+def delete_document(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    payload = _get_document_with_chunk_count(db, document_id, current_user=current_user)
     if payload is None:
         raise HTTPException(status_code=404, detail=f"Document {document_id} was not found.")
 

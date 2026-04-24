@@ -13,7 +13,8 @@ import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
 
 from app.config.settings import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -21,7 +22,7 @@ from app.config.settings import (
     JWT_SECRET_KEY,
     REFRESH_TOKEN_EXPIRE_DAYS,
 )
-from app.models.mysql import User, get_db
+from app.models.mysql import RoleName, User, get_db
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -102,10 +103,19 @@ def get_current_user(
             detail="Invalid token subject.",
         ) from exc
 
-    user = db.get(User, user_id)
+    user = db.scalar(
+        select(User)
+        .options(joinedload(User.role))
+        .where(User.id == user_id)
+    )
     if user is None or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authenticated user was not found or is inactive.",
         )
     return user
+
+
+def is_privileged_user(user: User) -> bool:
+    role_name = user.role.name if user.role else None
+    return role_name in {RoleName.ADMIN, RoleName.MANAGER}

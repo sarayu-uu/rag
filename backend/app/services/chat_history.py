@@ -1,7 +1,7 @@
 """
 File purpose:
 - Implements Phase 9 chat persistence for sessions, messages, and lightweight prompt memory.
-- Keeps `user_id = 1` as the temporary authenticated user until auth is added.
+- Uses the authenticated user's id for session ownership.
 """
 
 from __future__ import annotations
@@ -12,14 +12,10 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.mysql import ChatMessage, ChatSession, MessageRole, Role, RoleName, SessionStatus, User
+from app.models.mysql import ChatMessage, ChatSession, MessageRole, SessionStatus
 
-CHAT_USER_ID = 1
 CHAT_TOKEN_LIMIT = 10000
 DEFAULT_MESSAGE_TOKEN_COUNT = 100
-CHAT_USERNAME = "chat_user_1"
-CHAT_EMAIL = "chat.user.1@gmail.com"
-CHAT_PASSWORD_HASH = "auth-not-enabled"
 RECENT_MESSAGE_LIMIT = 6
 OLDER_SUMMARY_LIMIT = 1200
 SESSION_TITLE_WORDS = 3
@@ -29,34 +25,9 @@ def first_words(text: str, count: int = SESSION_TITLE_WORDS) -> str:
     return " ".join(text.strip().split()[:count])
 
 
-def ensure_chat_user(db: Session) -> User:
-    user = db.get(User, CHAT_USER_ID)
-    if user is not None:
-        return user
-
-    analyst_role = db.scalar(select(Role).where(Role.name == RoleName.ANALYST))
-    if analyst_role is None:
-        analyst_role = Role(name=RoleName.ANALYST, description="Temporary role for chat user 1.")
-        db.add(analyst_role)
-        db.flush()
-
-    user = User(
-        id=CHAT_USER_ID,
-        username=CHAT_USERNAME,
-        email=CHAT_EMAIL,
-        password_hash=CHAT_PASSWORD_HASH,
-        role_id=analyst_role.id,
-        is_active=True,
-    )
-    db.add(user)
-    db.flush()
-    return user
-
-
-def create_chat_session(db: Session, *, question: str) -> ChatSession:
-    ensure_chat_user(db)
+def create_chat_session(db: Session, *, question: str, user_id: int) -> ChatSession:
     session = ChatSession(
-        user_id=CHAT_USER_ID,
+        user_id=user_id,
         title=first_words(question),
         tokens_used_total=0,
         token_limit=CHAT_TOKEN_LIMIT,
@@ -69,21 +40,27 @@ def create_chat_session(db: Session, *, question: str) -> ChatSession:
     return session
 
 
-def get_chat_session(db: Session, session_id: int) -> ChatSession | None:
+def get_chat_session(db: Session, session_id: int, *, user_id: int) -> ChatSession | None:
     return db.scalar(
         select(ChatSession)
         .options(selectinload(ChatSession.messages))
-        .where(ChatSession.id == session_id, ChatSession.user_id == CHAT_USER_ID)
+        .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
     )
 
 
-def get_or_create_chat_session(db: Session, *, question: str, session_id: int | None) -> tuple[ChatSession, bool]:
+def get_or_create_chat_session(
+    db: Session,
+    *,
+    question: str,
+    session_id: int | None,
+    user_id: int,
+) -> tuple[ChatSession, bool]:
     if session_id is None:
-        return create_chat_session(db, question=question), True
+        return create_chat_session(db, question=question, user_id=user_id), True
 
-    session = get_chat_session(db, session_id)
+    session = get_chat_session(db, session_id, user_id=user_id)
     if session is None:
-        return create_chat_session(db, question=question), True
+        raise LookupError(f"Chat session {session_id} was not found for the authenticated user.")
 
     if not session.title:
         session.title = first_words(question)
@@ -98,13 +75,14 @@ def append_chat_message(
     db: Session,
     *,
     session: ChatSession,
+    user_id: int,
     role: MessageRole,
     content: str,
     token_count: int = DEFAULT_MESSAGE_TOKEN_COUNT,
 ) -> ChatMessage:
     message = ChatMessage(
         session_id=session.id,
-        user_id=CHAT_USER_ID,
+        user_id=user_id,
         role=role,
         content=content.strip(),
         token_count=token_count,
@@ -171,17 +149,17 @@ def serialize_session(session: ChatSession) -> dict[str, Any]:
     }
 
 
-def list_chat_sessions(db: Session) -> list[dict[str, Any]]:
+def list_chat_sessions(db: Session, *, user_id: int) -> list[dict[str, Any]]:
     sessions = db.scalars(
         select(ChatSession)
-        .where(ChatSession.user_id == CHAT_USER_ID)
+        .where(ChatSession.user_id == user_id)
         .order_by(ChatSession.started_at.desc(), ChatSession.id.desc())
     ).all()
     return [serialize_session(session) for session in sessions]
 
 
-def get_session_messages_payload(db: Session, session_id: int) -> dict[str, Any] | None:
-    session = get_chat_session(db, session_id)
+def get_session_messages_payload(db: Session, session_id: int, *, user_id: int) -> dict[str, Any] | None:
+    session = get_chat_session(db, session_id, user_id=user_id)
     if session is None:
         return None
 

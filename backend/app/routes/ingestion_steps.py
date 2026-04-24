@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.auth.security import get_current_user, is_privileged_user
 from app.config.settings import UPLOAD_DIR
 from app.ingestion.chunking import (
     ChunkingConfig,
@@ -38,7 +39,7 @@ from app.ingestion.validators import (
     validate_file_size,
     validate_file_type,
 )
-from app.models.mysql import Document, DocumentStatus, get_db, get_or_create_default_ingestion_user
+from app.models.mysql import Document, DocumentStatus, User, get_db, get_or_create_default_ingestion_user
 from app.retrieval.service import sync_document_chunks_to_vector_store
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion-steps"])
@@ -210,9 +211,11 @@ def _build_chunks_for_document(
     )
 
 
-def _get_document_or_404(db: Session, document_id: int) -> Document:
+def _get_document_or_404(db: Session, document_id: int, *, current_user: User | None = None) -> Document:
     document = db.scalar(select(Document).where(Document.id == document_id))
     if document is None:
+        raise HTTPException(status_code=404, detail=f"document_id {document_id} was not found.")
+    if current_user is not None and not is_privileged_user(current_user) and document.upload_user_id != current_user.id:
         raise HTTPException(status_code=404, detail=f"document_id {document_id} was not found.")
     return document
 
@@ -252,10 +255,11 @@ def step_load(
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     url = _normalize_url_input(url)
     _single_input_guard(file, url)
-    default_user = get_or_create_default_ingestion_user(db)
+    upload_user = current_user if current_user is not None else get_or_create_default_ingestion_user(db)
 
     if url:
         try:
@@ -267,7 +271,7 @@ def step_load(
                 source="url",
                 storage_path=url,
                 file_type=metadata["file_type"],
-                upload_user_id=default_user.id,
+                upload_user_id=upload_user.id,
                 source_url=url,
                 document_name=metadata["document_name"],
                 page_numbers=metadata["page_numbers"],
@@ -310,7 +314,7 @@ def step_load(
             source="file",
             storage_path=str(file_path),
             file_type=metadata["file_type"],
-            upload_user_id=default_user.id,
+            upload_user_id=upload_user.id,
             source_url=None,
             document_name=metadata["document_name"],
             page_numbers=metadata["page_numbers"],
@@ -380,12 +384,13 @@ def _run_upload_pipeline(
     chunk_overlap: int = Form(default=100),
     db: Session = Depends(get_db),
     index_in_vector_store: bool,
+    upload_user: User | None = None,
 ) -> dict[str, Any]:
     url = _normalize_url_input(url)
     _single_input_guard(file, url)
     config = _validate_chunk_form_inputs(chunk_size, chunk_overlap)
     parsed_permissions_tags = _parse_permissions_tags(permissions_tags)
-    default_user = get_or_create_default_ingestion_user(db)
+    effective_upload_user = upload_user if upload_user is not None else get_or_create_default_ingestion_user(db)
 
     if url:
         try:
@@ -400,7 +405,7 @@ def _run_upload_pipeline(
                 source="url",
                 storage_path=url,
                 file_type=metadata["file_type"],
-                upload_user_id=default_user.id,
+                upload_user_id=effective_upload_user.id,
                 source_url=url,
                 document_name=metadata["document_name"],
                 page_numbers=metadata["page_numbers"],
@@ -471,7 +476,7 @@ def _run_upload_pipeline(
             source="file",
             storage_path=str(file_path),
             file_type=metadata["file_type"],
-            upload_user_id=default_user.id,
+            upload_user_id=effective_upload_user.id,
             source_url=None,
             document_name=metadata["document_name"],
             page_numbers=metadata["page_numbers"],
@@ -540,6 +545,7 @@ def upload_to_chunk(
     chunk_size: int = Form(default=500),
     chunk_overlap: int = Form(default=100),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     return _run_upload_pipeline(
         file=file,
@@ -549,6 +555,7 @@ def upload_to_chunk(
         chunk_overlap=chunk_overlap,
         db=db,
         index_in_vector_store=False,
+        upload_user=current_user,
     )
 
 
@@ -560,6 +567,7 @@ def upload_document(
     chunk_size: int = Form(default=500),
     chunk_overlap: int = Form(default=100),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     return _run_upload_pipeline(
         file=file,
@@ -569,12 +577,14 @@ def upload_document(
         chunk_overlap=chunk_overlap,
         db=db,
         index_in_vector_store=True,
+        upload_user=current_user,
     )
 
 
 @router.post("/clean", summary="Step 2: Clean and normalize extracted text")
 def step_clean(
     payload: CleanTextRequest,
+    _: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     cleaned = clean_text(payload.text)
     validate_extracted_content(cleaned)
@@ -592,9 +602,10 @@ def step_clean(
 def step_chunk(
     payload: ChunkTextRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     config = _validate_chunk_form_inputs(payload.chunk_size, payload.chunk_overlap)
-    document = _get_document_or_404(db, payload.document_id)
+    document = _get_document_or_404(db, payload.document_id, current_user=current_user)
     source_name = payload.source_name.strip() or document.title
     owner_user_id = payload.owner_user_id if payload.owner_user_id is not None else document.upload_user_id
 

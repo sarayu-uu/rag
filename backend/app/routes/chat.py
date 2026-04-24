@@ -12,10 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.models.mysql import MessageRole, get_db
+from app.auth.security import get_current_user, is_privileged_user
+from app.models.mysql import MessageRole, User, get_db
 from app.retrieval.service import ensure_vector_store_ready
 from app.services.chat_history import (
-    CHAT_USER_ID,
     append_chat_message,
     build_memory_context,
     get_or_create_chat_session,
@@ -57,7 +57,10 @@ class ChatQueryRequest(BaseModel):
 
 
 @router.post("/answer-from-matches", summary="Phase 5: Generate a grounded answer from provided matches")
-def generate_answer_from_matches(payload: AnswerFromMatchesRequest) -> dict[str, Any]:
+def generate_answer_from_matches(
+    payload: AnswerFromMatchesRequest,
+    _: User = Depends(get_current_user),
+) -> dict[str, Any]:
     try:
         result = answer_question_from_matches(
             payload.question,
@@ -76,18 +79,24 @@ def generate_answer_from_matches(payload: AnswerFromMatchesRequest) -> dict[str,
 
 
 @router.post("/query", summary="Phase 6: Search across all indexed documents and generate a grounded answer")
-def chat_query(payload: ChatQueryRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
+def chat_query(
+    payload: ChatQueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     try:
         ensure_vector_store_ready()
         session, created = get_or_create_chat_session(
             db,
             question=payload.question,
             session_id=payload.session_id,
+            user_id=current_user.id,
         )
         memory_context = build_memory_context(session)
         append_chat_message(
             db,
             session=session,
+            user_id=current_user.id,
             role=MessageRole.USER,
             content=payload.question,
         )
@@ -95,14 +104,19 @@ def chat_query(payload: ChatQueryRequest, db: Session = Depends(get_db)) -> dict
             payload.question,
             limit=payload.limit,
             memory_context=memory_context,
+            owner_user_id=None if is_privileged_user(current_user) else current_user.id,
         )
         append_chat_message(
             db,
             session=session,
+            user_id=current_user.id,
             role=MessageRole.ASSISTANT,
             content=result["answer"],
         )
         db.commit()
+    except LookupError as exc:
+        db.rollback()
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -122,22 +136,29 @@ def chat_query(payload: ChatQueryRequest, db: Session = Depends(get_db)) -> dict
 
 
 @router.get("/sessions", summary="Phase 9: List persistent chat sessions")
-def get_sessions(db: Session = Depends(get_db)) -> dict[str, Any]:
+def get_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     return {
         "status": "success",
-        "user_id": CHAT_USER_ID,
-        "sessions": list_chat_sessions(db),
+        "user_id": current_user.id,
+        "sessions": list_chat_sessions(db, user_id=current_user.id),
     }
 
 
 @router.get("/sessions/{session_id}/messages", summary="Phase 9: Get all messages for a session")
-def get_session_messages(session_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
-    payload = get_session_messages_payload(db, session_id)
+def get_session_messages(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    payload = get_session_messages_payload(db, session_id, user_id=current_user.id)
     if payload is None:
         raise HTTPException(status_code=404, detail=f"Chat session {session_id} was not found.")
 
     return {
         "status": "success",
-        "user_id": CHAT_USER_ID,
+        "user_id": current_user.id,
         **payload,
     }

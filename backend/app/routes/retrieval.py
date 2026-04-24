@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.mysql import Document, DocumentChunk, get_db
+from app.auth.security import get_current_user, is_privileged_user
+from app.models.mysql import Document, DocumentChunk, User, get_db
 from app.retrieval.service import (
     ensure_vector_store_ready,
     search_chunk_text,
@@ -29,12 +30,14 @@ class RetrievalSearchRequest(BaseModel):
 @router.post("/search", summary="Phase 4: Search indexed chunks in the vector store")
 def search_indexed_chunks(
     payload: RetrievalSearchRequest,
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     try:
         ensure_vector_store_ready()
         matches = search_chunk_text(
             payload.query,
             limit=payload.limit,
+            owner_user_id=None if is_privileged_user(current_user) else current_user.id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -53,9 +56,12 @@ def search_indexed_chunks(
 def reindex_document(
     document_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
     document = db.scalar(select(Document).where(Document.id == document_id))
     if document is None:
+        raise HTTPException(status_code=404, detail=f"document_id {document_id} was not found.")
+    if not is_privileged_user(current_user) and document.upload_user_id != current_user.id:
         raise HTTPException(status_code=404, detail=f"document_id {document_id} was not found.")
 
     chunks = list(

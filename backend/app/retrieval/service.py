@@ -70,9 +70,15 @@ def search_chunk_text(
     *,
     limit: int,
     document_id: int | None = None,
+    owner_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     query_vector = embed_query(query)
-    results = search_vectors(query_vector, limit=limit, document_id=document_id)
+    results = search_vectors(
+        query_vector,
+        limit=limit,
+        document_id=document_id,
+        owner_user_id=owner_user_id,
+    )
 
     normalized_results: list[dict[str, Any]] = []
     for result in results:
@@ -111,6 +117,7 @@ def keyword_search_chunk_text(
     *,
     limit: int,
     document_id: int | None = None,
+    owner_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     tokens = _tokenize_query(query)
     if not tokens:
@@ -120,6 +127,8 @@ def keyword_search_chunk_text(
     statement = select(DocumentChunk).where(or_(*filters))
     if document_id is not None:
         statement = statement.where(DocumentChunk.document_id == int(document_id))
+    if owner_user_id is not None:
+        statement = statement.where(DocumentChunk.owner_user_id == int(owner_user_id))
 
     # Pull a broader candidate set, then score and trim in Python.
     statement = statement.order_by(DocumentChunk.document_id.asc(), DocumentChunk.chunk_index.asc()).limit(limit * 10)

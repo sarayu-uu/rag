@@ -272,10 +272,19 @@ def answer_question_with_retrieval(
     *,
     limit: int,
     memory_context: dict[str, Any] | None = None,
+    owner_user_id: int | None = None,
 ) -> dict[str, Any]:
     candidate_limit = max(limit * OVERFETCH_MULTIPLIER, limit)
-    semantic_matches = search_chunk_text(question, limit=candidate_limit)
-    keyword_matches = keyword_search_chunk_text(question, limit=candidate_limit)
+    semantic_matches = search_chunk_text(
+        question,
+        limit=candidate_limit,
+        owner_user_id=owner_user_id,
+    )
+    keyword_matches = keyword_search_chunk_text(
+        question,
+        limit=candidate_limit,
+        owner_user_id=owner_user_id,
+    )
     reranked_matches = _rerank_hybrid_matches(semantic_matches, keyword_matches)
     selected_matches = _select_multi_document_context(reranked_matches, limit=limit)
     result = answer_question_from_matches(

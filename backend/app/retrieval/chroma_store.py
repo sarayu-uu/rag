@@ -92,10 +92,22 @@ def search_vectors(
     *,
     limit: int | None = None,
     document_id: int | None = None,
+    owner_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     collection = get_collection()
 
-    where = {"document_id": int(document_id)} if document_id is not None else None
+    filters: list[dict[str, int]] = []
+    if document_id is not None:
+        filters.append({"document_id": int(document_id)})
+    if owner_user_id is not None:
+        filters.append({"owner_user_id": int(owner_user_id)})
+
+    where: dict[str, Any] | None = None
+    if len(filters) == 1:
+        where = filters[0]
+    elif len(filters) > 1:
+        where = {"$and": filters}
+
     results = collection.query(
         query_embeddings=[query_vector],
         n_results=limit or VECTOR_SEARCH_LIMIT,

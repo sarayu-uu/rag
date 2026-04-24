@@ -13,7 +13,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.mysql import MetricUsage, RequestType, get_db
+from app.auth.security import get_current_user, is_privileged_user
+from app.models.mysql import MetricUsage, RequestType, User, get_db
 
 router = APIRouter(tags=["metrics"])
 
@@ -25,21 +26,21 @@ def _to_float(value: Decimal | int | None) -> float:
 
 
 @router.get("/metrics", summary="Phase 12: Aggregate metrics and telemetry counters")
-def get_metrics(db: Session = Depends(get_db)) -> dict[str, Any]:
-    totals = db.execute(
-        select(
-            func.count(MetricUsage.id),
-            func.coalesce(func.sum(MetricUsage.request_count), 0),
-            func.coalesce(func.sum(MetricUsage.token_input), 0),
-            func.coalesce(func.sum(MetricUsage.token_output), 0),
-            func.coalesce(func.sum(MetricUsage.token_total), 0),
-            func.coalesce(func.sum(MetricUsage.error_count), 0),
-            func.coalesce(func.avg(MetricUsage.latency_ms), 0),
-            func.coalesce(func.sum(MetricUsage.estimated_cost), 0),
-        )
-    ).one()
-
-    by_request_type_rows = db.execute(
+def get_metrics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    totals_statement = select(
+        func.count(MetricUsage.id),
+        func.coalesce(func.sum(MetricUsage.request_count), 0),
+        func.coalesce(func.sum(MetricUsage.token_input), 0),
+        func.coalesce(func.sum(MetricUsage.token_output), 0),
+        func.coalesce(func.sum(MetricUsage.token_total), 0),
+        func.coalesce(func.sum(MetricUsage.error_count), 0),
+        func.coalesce(func.avg(MetricUsage.latency_ms), 0),
+        func.coalesce(func.sum(MetricUsage.estimated_cost), 0),
+    )
+    by_request_type_statement = (
         select(
             MetricUsage.request_type,
             func.coalesce(func.sum(MetricUsage.request_count), 0),
@@ -48,7 +49,13 @@ def get_metrics(db: Session = Depends(get_db)) -> dict[str, Any]:
         )
         .group_by(MetricUsage.request_type)
         .order_by(MetricUsage.request_type.asc())
-    ).all()
+    )
+    if not is_privileged_user(current_user):
+        totals_statement = totals_statement.where(MetricUsage.user_id == current_user.id)
+        by_request_type_statement = by_request_type_statement.where(MetricUsage.user_id == current_user.id)
+
+    totals = db.execute(totals_statement).one()
+    by_request_type_rows = db.execute(by_request_type_statement).all()
 
     by_request_type = {
         (request_type.value if isinstance(request_type, RequestType) else str(request_type)): {
@@ -72,4 +79,5 @@ def get_metrics(db: Session = Depends(get_db)) -> dict[str, Any]:
             "estimated_cost": round(_to_float(totals[7]), 6),
         },
         "by_request_type": by_request_type,
+        "scope": "global" if is_privileged_user(current_user) else "current_user",
     }
