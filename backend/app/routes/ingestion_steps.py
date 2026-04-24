@@ -572,6 +572,77 @@ def upload_document(
     )
 
 
+@router.post("/upload-batch", summary="Batch upload: store multiple documents, chunks, and vectors")
+def upload_documents_batch(
+    files: list[UploadFile] = File(default_factory=list),
+    permissions_tags: str | None = Form(default=None),
+    chunk_size: int = Form(default=500),
+    chunk_overlap: int = Form(default=100),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    if not files:
+        raise HTTPException(status_code=400, detail="No files received. Use form field name 'files'.")
+
+    results: list[dict[str, Any]] = []
+    success_count = 0
+    failure_count = 0
+
+    for file in files:
+        filename = file.filename or "unknown"
+        try:
+            pipeline_result = _run_upload_pipeline(
+                file=file,
+                url=None,
+                permissions_tags=permissions_tags,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                db=db,
+                index_in_vector_store=True,
+            )
+            results.append(
+                {
+                    "file_name": filename,
+                    "status": "success",
+                    "document_id": pipeline_result.get("document_id"),
+                    "chunk_count": pipeline_result.get("chunk_count", 0),
+                    "vector_indexed": pipeline_result.get("vector_indexed", False),
+                    "message": pipeline_result.get("message"),
+                }
+            )
+            success_count += 1
+        except HTTPException as exc:
+            db.rollback()
+            results.append(
+                {
+                    "file_name": filename,
+                    "status": "failed",
+                    "detail": str(exc.detail),
+                    "status_code": exc.status_code,
+                }
+            )
+            failure_count += 1
+        except Exception as exc:
+            db.rollback()
+            results.append(
+                {
+                    "file_name": filename,
+                    "status": "failed",
+                    "detail": str(exc),
+                    "status_code": 500,
+                }
+            )
+            failure_count += 1
+
+    return {
+        "status": "success" if failure_count == 0 else "partial_success",
+        "total_files": len(files),
+        "processed_files": success_count + failure_count,
+        "success_count": success_count,
+        "failure_count": failure_count,
+        "results": results,
+    }
+
+
 @router.post("/clean", summary="Step 2: Clean and normalize extracted text")
 def step_clean(
     payload: CleanTextRequest,
