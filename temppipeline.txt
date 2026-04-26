@@ -1,0 +1,75 @@
+﻿TRUE PIPELINE (from current codebase)
+===================================
+
+This project has many step/debug endpoints, but only one end-to-end RAG pipeline that reaches final grounded answer generation:
+
+1) INGEST + INDEX (single production ingestion path)
+   Endpoint: POST /ingestion/upload
+   Route: app/routes/ingestion_steps.py -> upload_document()
+   Calls:
+   - _run_upload_pipeline(index_in_vector_store=True)
+   - load_file_with_metadata(...) OR load_url_with_metadata(...)
+   - clean_text(...)
+   - _build_chunks_for_document(...)
+     - PDF path: load_pdf_sections(...) -> clean page text -> chunk_sections(...)
+     - Non-PDF path: _chunk_cleaned_text(...) -> chunk_text(...)
+   - replace_document_chunks(...)  [MySQL document_chunks write]
+   - _index_saved_chunks(...)
+     - sync_document_chunks_to_vector_store(...)
+       - embed_texts(...) via fastembed
+       - delete_document_vectors(document_id)
+       - upsert_chunk_vectors(...) into Chroma
+   Output: document + chunks persisted in MySQL and vectors persisted in Chroma.
+
+2) RETRIEVE + GENERATE (single production query path to final answer)
+   Endpoint: POST /chat/query
+   Route: app/routes/chat.py -> chat_query()
+   Calls:
+   - ensure_vector_store_ready()
+   - answer_question_with_retrieval(question, limit)
+     - search_chunk_text(...)          [semantic search in Chroma]
+     - keyword_search_chunk_text(...)  [keyword search in MySQL chunks]
+     - _rerank_hybrid_matches(...)
+     - _select_multi_document_context(...)
+     - answer_question_from_matches(...)
+       - render prompts (rag_system.jinja2 + rag_user.jinja2)
+       - build_chat_model().invoke(...) (Groq LLM)
+   Output: grounded answer + sources + document summary + retrieval debug.
+
+Actual "true pipeline" sequence
+--------------------------------
+POST /ingestion/upload  -->  POST /chat/query
+
+Notes on other endpoints
+------------------------
+- /ingestion/load, /ingestion/clean, /ingestion/chunk, /ingestion/uploadtochunk are stepwise/demo variants.
+- /retrieval/search and /chat/answer-from-matches are partial/testing helpers.
+- Frontend currently calls only /ingestion/upload (frontend/src/components/Upload.tsx).
+- Full answer generation endpoint is /chat/query.
+
+
+
+SUPER_ADMIN
+
+Own global RBAC policy and tenant/workspace guardrails.
+Approve/revoke high-risk permission changes and emergency overrides.
+Run compliance/audit access reviews and incident access control.
+Monitor platform-wide ingestion/retrieval/model health.
+ADMIN
+
+Manage users in assigned workspace and map them to allowed roles.
+Manage document lifecycle (publish/archive/retention).
+Grant document-level query/edit permissions inside workspace scope.
+Track usage/operational metrics and escalate risk to Super Admin.
+EDITOR
+
+Upload single/batch files and curate source metadata quality.
+Trigger ingestion/re-index for new and updated documents.
+Fix ingestion failures and verify chunk/retrieval quality.
+Maintain source labeling and permission tags for reliable RAG.
+VIEWER
+
+Ask questions and consume grounded answers with sources.
+Browse allowed documents and chat history.
+Flag low-confidence results to Editors/Admins.
+No upload/reindex/permission management.
