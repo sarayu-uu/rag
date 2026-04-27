@@ -41,6 +41,18 @@ def _render_prompt(template_name: str, **context: Any) -> str:
     return template.render(**context).strip()
 
 
+def _normalize_memory_context(memory_context: dict[str, Any] | None) -> dict[str, Any]:
+    context = memory_context or {}
+    older_summary = context.get("older_summary", "")
+    recent_messages = context.get("recent_messages", [])
+    message_count = context.get("message_count", len(recent_messages) if isinstance(recent_messages, list) else 0)
+    return {
+        "older_summary": str(older_summary or ""),
+        "recent_messages": recent_messages if isinstance(recent_messages, list) else [],
+        "message_count": int(message_count or 0),
+    }
+
+
 def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
     return {
         "id": str(match.get("id", index)),
@@ -249,7 +261,7 @@ def answer_question_from_matches(
         "rag_user.jinja2",
         question=cleaned_question,
         matches=usable_matches,
-        memory_context=memory_context or {},
+        memory_context=_normalize_memory_context(memory_context),
     )
 
     model_start = perf_counter()
