@@ -1,5 +1,3 @@
 """
-Telemetry package scaffold for Phase 1.
-
-Metrics collection and observability features will be implemented in later phases.
+Telemetry package for Phase 10 metrics collection, observability, and monitoring.
 """

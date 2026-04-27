@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -251,12 +252,14 @@ def answer_question_from_matches(
         memory_context=memory_context or {},
     )
 
+    model_start = perf_counter()
     response = build_chat_model().invoke(
         [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
     )
+    model_latency_ms = int((perf_counter() - model_start) * 1000)
     answer = response.content if isinstance(response.content, str) else str(response.content)
 
     return {
@@ -264,6 +267,7 @@ def answer_question_from_matches(
         "sources": _build_sources(usable_matches),
         "documents_used": _summarize_documents(usable_matches),
         "match_count": len(usable_matches),
+        "model_latency_ms": model_latency_ms,
     }
 
 
@@ -273,11 +277,14 @@ def answer_question_with_retrieval(
     limit: int,
     memory_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    retrieval_start = perf_counter()
     candidate_limit = max(limit * OVERFETCH_MULTIPLIER, limit)
     semantic_matches = search_chunk_text(question, limit=candidate_limit)
     keyword_matches = keyword_search_chunk_text(question, limit=candidate_limit)
     reranked_matches = _rerank_hybrid_matches(semantic_matches, keyword_matches)
     selected_matches = _select_multi_document_context(reranked_matches, limit=limit)
+    retrieval_latency_ms = int((perf_counter() - retrieval_start) * 1000)
+
     result = answer_question_from_matches(
         question,
         selected_matches,
@@ -290,4 +297,5 @@ def answer_question_with_retrieval(
         "keyword_match_count": len(keyword_matches),
         "hybrid_match_count": len(reranked_matches),
     }
+    result["retrieval_latency_ms"] = retrieval_latency_ms
     return result

@@ -1,0 +1,78 @@
+PHASE 10 NOTES (Telemetry / Observability / Metrics)
+====================================================
+
+1) Middleware currently used in backend
+- CORSMiddleware
+  - Added in backend/app/main.py
+  - Purpose: controls allowed frontend origins, headers, methods, credentials.
+
+- Custom telemetry middleware (telemetry_middleware)
+  - Added in backend/app/telemetry/middleware.py and mounted in backend/app/main.py
+  - Purpose:
+    - measures request latency
+    - logs request and error information
+    - writes one row per request into metrics_usage (for /chat, /retrieval, /ingestion routes)
+
+
+2) Embedding models (current + previously used/tested)
+- Current embedding model from settings:
+  - BAAI/bge-small-en-v1.5 (default via EMBEDDING_MODEL in backend/app/config/settings.py)
+  - Dimension usually set as 384 via VECTOR_DIMENSION
+
+- Two other embedding models we used/tested previously:
+  - BAAI/bge-base-en-v1.5
+  - sentence-transformers/all-MiniLM-L6-v2
+
+Note:
+- If you switch model, also update VECTOR_DIMENSION correctly in backend/.env.
+
+
+3) Milvus note (loading behavior)
+- We also tried Milvus earlier.
+- Observation:
+  - startup with --reload can feel slow because reload restarts workers frequently and re-initializes heavy dependencies.
+  - running backend on a fixed port command (example: --port 8001 without aggressive reload behavior) works better for Milvus startup.
+
+Recommendation:
+- For Milvus/local heavy vector-store testing, prefer non-reload run for stable startup.
+
+
+4) Telemetry phase pipeline (how it works now)
+- Step 1: Request enters FastAPI.
+- Step 2: telemetry_middleware starts timer.
+- Step 3: Endpoint executes (/ingestion, /retrieval, /chat).
+- Step 4: Endpoints add telemetry headers where available:
+  - chat: token input/output/total, estimated cost, retrieval latency, model latency, session_id, user_id
+  - retrieval: retrieval latency
+  - ingestion: ingestion time (+ user_id when available)
+- Step 5: middleware reads response status + telemetry headers.
+- Step 6: middleware writes a record into metrics_usage table:
+  - request_type
+  - request_count
+  - error_count
+  - latency_ms
+  - ingestion_time_ms
+  - retrieval_latency_ms
+  - model_latency_ms
+  - token_input / token_output / token_total
+  - estimated_cost
+  - user_id / session_id (if available)
+  - created_at
+- Step 7: Metrics APIs read and aggregate from metrics_usage:
+  - GET /metrics
+  - GET /metrics/raw
+  - GET /metrics/users
+  - GET /metrics/request-types
+
+
+5) What is shown in docs for telemetry
+- In /docs under tag "telemetry":
+  - GET /metrics: aggregated telemetry + health overview
+  - GET /metrics/raw: raw DB rows from metrics_usage
+  - GET /metrics/users: per-user usage summary
+  - GET /metrics/request-types: grouped summary by request type
+
+
+6) Database persistence
+- Telemetry is saved in existing MySQL table: metrics_usage.
+- No telemetry_events/system_health_snapshots table is required for current implementation.

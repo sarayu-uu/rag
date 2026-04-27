@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from time import perf_counter
+from typing import Any, List
 from uuid import uuid4
 
 import shutil
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -38,8 +39,9 @@ from app.ingestion.validators import (
     validate_file_size,
     validate_file_type,
 )
-from app.models.mysql import Document, DocumentStatus, get_db, get_or_create_default_ingestion_user
+from app.models.mysql import Document, DocumentChunk, DocumentStatus, get_db, get_or_create_default_ingestion_user
 from app.retrieval.service import sync_document_chunks_to_vector_store
+from app.retrieval.service import clear_document_vectors
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion-steps"])
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -251,8 +253,10 @@ def _index_saved_chunks(document_id: int, saved_chunks: list[Any]) -> dict[str, 
 def step_load(
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
+    response: Response = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    request_start = perf_counter()
     url = _normalize_url_input(url)
     _single_input_guard(file, url)
     default_user = get_or_create_default_ingestion_user(db)
@@ -285,7 +289,7 @@ def step_load(
                 detail="Failed to persist the document record for the loaded URL.",
             ) from exc
 
-        return {
+        payload = {
             "status": "success",
             "message": "Raw text extraction completed.",
             "source": "url",
@@ -295,6 +299,10 @@ def step_load(
             "raw_text": raw_text,
             "raw_text_preview": raw_text[:1200],
         }
+        if response is not None:
+            response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - request_start) * 1000))
+            response.headers["X-Telemetry-User-Id"] = str(document.upload_user_id)
+        return payload
 
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="No file received.")
@@ -328,7 +336,7 @@ def step_load(
             detail="Failed to persist the document record for the loaded file.",
         ) from exc
 
-    return {
+    payload = {
         "status": "success",
         "message": "Raw text extraction completed.",
         "source": "file",
@@ -341,6 +349,83 @@ def step_load(
         "upload_user_id": document.upload_user_id,
         "raw_text": raw_text,
         "raw_text_preview": raw_text[:1200],
+    }
+    if response is not None:
+        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - request_start) * 1000))
+        response.headers["X-Telemetry-User-Id"] = str(document.upload_user_id)
+    return payload
+
+
+@router.get("/documents", summary="List persisted indexed documents from MySQL")
+def list_persisted_documents(db: Session = Depends(get_db)) -> dict[str, Any]:
+    rows = db.execute(
+        select(
+            Document.id,
+            Document.title,
+            Document.file_type,
+            Document.status,
+            Document.upload_user_id,
+            Document.uploaded_at,
+            func.count(DocumentChunk.id).label("chunk_count"),
+        )
+        .outerjoin(DocumentChunk, DocumentChunk.document_id == Document.id)
+        .group_by(
+            Document.id,
+            Document.title,
+            Document.file_type,
+            Document.status,
+            Document.upload_user_id,
+            Document.uploaded_at,
+        )
+        .order_by(Document.uploaded_at.desc(), Document.id.desc())
+    ).all()
+
+    documents = [
+        {
+            "document_id": row[0],
+            "file_name": row[1],
+            "file_type": row[2],
+            "status": row[3].value if hasattr(row[3], "value") else str(row[3]),
+            "upload_user_id": row[4],
+            "uploaded_at": row[5].isoformat() if row[5] else None,
+            "chunk_count": int(row[6] or 0),
+            "vector_indexed": int(row[6] or 0) > 0 and str(row[3]).lower().find("processed") >= 0,
+        }
+        for row in rows
+    ]
+
+    return {
+        "status": "success",
+        "count": len(documents),
+        "documents": documents,
+    }
+
+
+@router.delete("/documents/{document_id}", summary="Delete a persisted document and its indexed vectors")
+def delete_persisted_document(document_id: int, db: Session = Depends(get_db)) -> dict[str, Any]:
+    document = db.scalar(select(Document).where(Document.id == document_id))
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"document_id {document_id} was not found.")
+
+    vector_deleted = True
+    vector_error = None
+    try:
+        clear_document_vectors(document_id)
+    except Exception as exc:
+        # Continue DB deletion even if vector deletion fails to avoid orphaned UI state.
+        vector_deleted = False
+        vector_error = str(exc)
+
+    title = document.title
+    db.delete(document)
+    db.commit()
+
+    return {
+        "status": "success",
+        "document_id": document_id,
+        "title": title,
+        "vector_deleted": vector_deleted,
+        "vector_error": vector_error,
     }
 
 
@@ -539,9 +624,11 @@ def upload_to_chunk(
     permissions_tags: str | None = Form(default=None),
     chunk_size: int = Form(default=500),
     chunk_overlap: int = Form(default=100),
+    response: Response = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return _run_upload_pipeline(
+    request_start = perf_counter()
+    payload = _run_upload_pipeline(
         file=file,
         url=url,
         permissions_tags=permissions_tags,
@@ -550,6 +637,12 @@ def upload_to_chunk(
         db=db,
         index_in_vector_store=False,
     )
+    if response is not None:
+        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - request_start) * 1000))
+        user_id = payload.get("upload_user_id")
+        if user_id is not None:
+            response.headers["X-Telemetry-User-Id"] = str(user_id)
+    return payload
 
 
 @router.post("/upload", summary="Default upload: store document, chunks, and vectors automatically")
@@ -559,9 +652,11 @@ def upload_document(
     permissions_tags: str | None = Form(default=None),
     chunk_size: int = Form(default=500),
     chunk_overlap: int = Form(default=100),
+    response: Response = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    return _run_upload_pipeline(
+    request_start = perf_counter()
+    payload = _run_upload_pipeline(
         file=file,
         url=url,
         permissions_tags=permissions_tags,
@@ -570,16 +665,63 @@ def upload_document(
         db=db,
         index_in_vector_store=True,
     )
+    if response is not None:
+        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - request_start) * 1000))
+        user_id = payload.get("upload_user_id")
+        if user_id is not None:
+            response.headers["X-Telemetry-User-Id"] = str(user_id)
+    return payload
 
 
-@router.post("/upload-batch", summary="Batch upload: store multiple documents, chunks, and vectors")
+@router.post(
+    "/upload-batch",
+    summary="Batch upload: store multiple documents, chunks, and vectors",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["files"],
+                        "properties": {
+                            "files": {
+                                "type": "array",
+                                "items": {"type": "string", "format": "binary"},
+                                "description": "Upload multiple files. Repeat form field name `files`.",
+                            },
+                            "permissions_tags": {
+                                "type": "string",
+                                "nullable": True,
+                                "description": "Optional JSON array string or comma-separated tags.",
+                            },
+                            "chunk_size": {
+                                "type": "integer",
+                                "default": 500,
+                            },
+                            "chunk_overlap": {
+                                "type": "integer",
+                                "default": 100,
+                            },
+                        },
+                    }
+                }
+            },
+        }
+    },
+)
 def upload_documents_batch(
-    files: list[UploadFile] = File(default_factory=list),
+    files: List[UploadFile] = File(
+        ...,
+        description="Upload multiple files. Use the same form field name `files` for each selected file.",
+    ),
     permissions_tags: str | None = Form(default=None),
     chunk_size: int = Form(default=500),
     chunk_overlap: int = Form(default=100),
+    response: Response = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    request_start = perf_counter()
     if not files:
         raise HTTPException(status_code=400, detail="No files received. Use form field name 'files'.")
 
@@ -633,7 +775,7 @@ def upload_documents_batch(
             )
             failure_count += 1
 
-    return {
+    payload = {
         "status": "success" if failure_count == 0 else "partial_success",
         "total_files": len(files),
         "processed_files": success_count + failure_count,
@@ -641,6 +783,9 @@ def upload_documents_batch(
         "failure_count": failure_count,
         "results": results,
     }
+    if response is not None:
+        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - request_start) * 1000))
+    return payload
 
 
 @router.post("/clean", summary="Step 2: Clean and normalize extracted text")
@@ -662,8 +807,10 @@ def step_clean(
 @router.post("/chunk", summary="Step 3: Chunk cleaned text with metadata")
 def step_chunk(
     payload: ChunkTextRequest,
+    response: Response = None,
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    request_start = perf_counter()
     config = _validate_chunk_form_inputs(payload.chunk_size, payload.chunk_overlap)
     document = _get_document_or_404(db, payload.document_id)
     source_name = payload.source_name.strip() or document.title
@@ -692,7 +839,7 @@ def step_chunk(
 
     index_result = _index_saved_chunks(document.id, saved_chunks)
 
-    return {
+    result_payload = {
         "status": "success",
         "message": "Chunking completed, stored in MySQL, and indexed in Chroma.",
         "source": "text",
@@ -704,3 +851,7 @@ def step_chunk(
         "cleaned_text_preview": payload.text[:1200],
         "chunks": _serialize_chunks(saved_chunks),
     }
+    if response is not None:
+        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - request_start) * 1000))
+        response.headers["X-Telemetry-User-Id"] = str(document.upload_user_id)
+    return result_payload
