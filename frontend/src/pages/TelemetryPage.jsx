@@ -1,14 +1,23 @@
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
 import StatCard from "../components/common/StatCard";
-import { getHealth, getTelemetry } from "../lib/api";
+import { evaluateQualityReport, getHealth, getTelemetry } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 export default function TelemetryPage() {
+  const { user } = useAuth();
   const [hours, setHours] = useState(24);
   const [telemetry, setTelemetry] = useState(null);
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [evalQuestion, setEvalQuestion] = useState("");
+  const [evalGroundTruth, setEvalGroundTruth] = useState("");
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [evalError, setEvalError] = useState("");
+  const [evalResult, setEvalResult] = useState(null);
+  const canRunEval =
+    user?.role === "Admin" || user?.role === "SuperAdmin" || user?.role === "Super Admin";
 
   async function loadTelemetry(windowHours = hours) {
     setLoading(true);
@@ -30,6 +39,29 @@ export default function TelemetryPage() {
   useEffect(() => {
     loadTelemetry(hours);
   }, []);
+
+  async function runEvaluation(event) {
+    event.preventDefault();
+    if (!evalQuestion.trim()) {
+      setEvalError("Enter a question to evaluate.");
+      return;
+    }
+    setEvalLoading(true);
+    setEvalError("");
+    try {
+      const payload = await evaluateQualityReport({
+        question: evalQuestion.trim(),
+        groundTruth: evalGroundTruth.trim(),
+        limit: 5,
+        includeRagas: true,
+      });
+      setEvalResult(payload);
+    } catch (evaluationError) {
+      setEvalError(evaluationError.message || "Failed to run evaluation.");
+    } finally {
+      setEvalLoading(false);
+    }
+  }
 
   const logging = telemetry?.logging || {};
   const usage = telemetry?.usage_tracking || {};
@@ -182,6 +214,101 @@ export default function TelemetryPage() {
           </div>
         </article>
       </section>
+
+      {canRunEval ? (
+        <section className="feature-card">
+          <div className="feature-card-header">
+            <div>
+              <p className="eyebrow">Evaluation</p>
+              <h2>RAGAS + Retrieval Test</h2>
+            </div>
+          </div>
+          <form className="compact-form" onSubmit={runEvaluation}>
+            <label>
+              <span className="eyebrow">Question</span>
+              <textarea
+                value={evalQuestion}
+                onChange={(event) => setEvalQuestion(event.target.value)}
+                placeholder="Type a question to evaluate RAG quality."
+              />
+            </label>
+            <label>
+              <span className="eyebrow">Ground Truth (Optional)</span>
+              <textarea
+                value={evalGroundTruth}
+                onChange={(event) => setEvalGroundTruth(event.target.value)}
+                placeholder="Reference answer. Improves context_precision/context_recall quality."
+              />
+            </label>
+            <div className="composer-actions">
+              <small>Runs full retrieval + RAGAS evaluation. This can take longer than chat.</small>
+              <button type="submit" disabled={evalLoading}>
+                {evalLoading ? "Evaluating..." : "Run RAGAS Test"}
+              </button>
+            </div>
+          </form>
+
+          {evalError ? <div className="error-banner">{evalError}</div> : null}
+
+          {evalResult ? (
+            <div className="quality-metrics">
+              <h3>Retrieval Metrics</h3>
+              <ul className="quality-list">
+                <li>
+                  <strong>Top rerank score:</strong> {Number(evalResult.retrieval_summary?.top_rerank_score ?? 0).toFixed(4)}.
+                  Range: typically 0.00 to 1.15, higher is better.
+                </li>
+                <li>
+                  <strong>Average rerank score:</strong> {Number(evalResult.retrieval_summary?.avg_rerank_score ?? 0).toFixed(4)}.
+                  Range: typically 0.00 to 1.15, higher is better.
+                </li>
+                <li>
+                  <strong>Best semantic distance:</strong> {Number(evalResult.retrieval_summary?.best_semantic_distance ?? 0).toFixed(4)}.
+                  Range: 0.00 and above, lower is better.
+                </li>
+                <li>
+                  <strong>Retrieval latency:</strong> {evalResult.retrieval_summary?.retrieval_latency_ms ?? 0} ms.
+                  Range: 0 ms and above, lower is faster.
+                </li>
+                <li>
+                  <strong>Semantic/Keyword/Hybrid candidates:</strong>{" "}
+                  {evalResult.retrieval_summary?.retrieval_debug?.semantic_match_count ?? 0}/
+                  {evalResult.retrieval_summary?.retrieval_debug?.keyword_match_count ?? 0}/
+                  {evalResult.retrieval_summary?.retrieval_debug?.hybrid_match_count ?? 0}.
+                  Range: whole numbers 0 and above.
+                </li>
+              </ul>
+
+              <h3>RAGAS Metrics</h3>
+              {evalResult.ragas?.status !== "success" ? (
+                <p className="muted-copy">{evalResult.ragas?.detail || "RAGAS metrics are unavailable for this run."}</p>
+              ) : (
+                <ul className="quality-list">
+                  <li>
+                    <strong>Faithfulness:</strong> {Number(evalResult.ragas?.metrics?.faithfulness ?? 0).toFixed(4)}.
+                    Range: 0.00 to 1.00, higher means better grounding.
+                  </li>
+                  <li>
+                    <strong>Answer relevancy:</strong> {Number(evalResult.ragas?.metrics?.answer_relevancy ?? 0).toFixed(4)}.
+                    Range: 0.00 to 1.00, higher means the answer better matches the question.
+                  </li>
+                  <li>
+                    <strong>Context precision:</strong> {Number(evalResult.ragas?.metrics?.context_precision ?? 0).toFixed(4)}.
+                    Range: 0.00 to 1.00, higher means retrieved chunks are more focused and relevant.
+                  </li>
+                  <li>
+                    <strong>Context recall:</strong> {Number(evalResult.ragas?.metrics?.context_recall ?? 0).toFixed(4)}.
+                    Range: 0.00 to 1.00, higher means retrieved context covers more of the expected answer.
+                  </li>
+                </ul>
+              )}
+              {(evalResult.ragas?.skipped_metrics || []).length > 0 ? (
+                <p className="muted-copy">Skipped: {(evalResult.ragas?.skipped_metrics || []).join(", ")}</p>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
