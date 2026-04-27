@@ -200,7 +200,7 @@ class ChatSession(Base):
     )
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tokens_used_total: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    token_limit: Mapped[int] = mapped_column(Integer, default=1000, nullable=False)
+    token_limit: Mapped[int] = mapped_column(Integer, default=10000, nullable=False)
     status: Mapped[SessionStatus] = mapped_column(
         Enum(SessionStatus),
         default=SessionStatus.ACTIVE,

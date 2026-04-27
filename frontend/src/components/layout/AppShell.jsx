@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { key: "dashboard", label: "Overview", to: "/dashboard", accent: "signal" },
   { key: "documents", label: "Documents", to: "/documents", accent: "document" },
   { key: "chat", label: "Workspace", to: "/chat", accent: "chat" },
+  { key: "telemetry", label: "Telemetry", to: "/telemetry", accent: "admin" },
   { key: "profile", label: "Profile", to: "/profile", accent: "profile" },
   { key: "users", label: "Users", to: "/admin/users", accent: "admin" },
   { key: "permissions", label: "Permissions", to: "/admin/permissions", accent: "policy" },
@@ -56,6 +57,11 @@ const NAV_ICONS = {
       <path d="M8 10V7a4 4 0 118 0v3" fill="none" stroke="currentColor" strokeWidth="1.8" />
     </ShellIcon>
   ),
+  telemetry: (
+    <ShellIcon>
+      <path d="M4 18h16M7 15V9m5 6V6m5 9v-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </ShellIcon>
+  ),
 };
 
 export default function AppShell() {
@@ -68,7 +74,7 @@ export default function AppShell() {
 
   const allowedItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => {
-      if (item.key === "users" || item.key === "permissions") {
+      if (item.key === "users" || item.key === "permissions" || item.key === "telemetry") {
         return isManagementRole(user?.role);
       }
       return roleDefinition.navigation.includes(item.key);
@@ -79,6 +85,7 @@ export default function AppShell() {
     const match = allowedItems.find((item) => location.pathname.startsWith(item.to));
     return match?.label || "Workspace";
   }, [allowedItems, location.pathname]);
+  const isChatRoute = location.pathname.startsWith("/chat");
 
   function handleLogout() {
     signOut();
@@ -110,7 +117,7 @@ export default function AppShell() {
           <div className="brand-badge">RG</div>
           <div className="brand-copy">
             <p className="eyebrow">Grounded AI Workspace</p>
-            <h1>RAG Control</h1>
+            <h1>WHAT?, you ask?</h1>
           </div>
         </div>
 
@@ -163,7 +170,7 @@ export default function AppShell() {
           </div>
         </header>
 
-        <main className="app-content">
+        <main className={`app-content ${isChatRoute ? "app-content-chat" : ""}`}>
           <Outlet />
         </main>
       </div>

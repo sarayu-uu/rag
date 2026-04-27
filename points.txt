@@ -1,0 +1,7 @@
+﻿How sources are retrieved (what the note is showing)
+From backend logic:
+
+It does hybrid retrieval:
+semantic vector search (search_chunk_text)
+keyword search (keyword_search_chunk_text)
+Then applies weighted reranking (semantic + keyword + small content-length bonus).

@@ -30,6 +30,10 @@ export default function SessionList({ sessions, activeSessionId, loading, onSele
             >
               <strong>{session.title || `Session ${session.session_id}`}</strong>
               <span>{session.status}</span>
+              <span className="session-token-usage">
+                Tokens: {session.tokens_used_total ?? 0}
+                {typeof session.token_limit === "number" ? ` / ${session.token_limit}` : ""}
+              </span>
               <small>{new Date(session.started_at).toLocaleString()}</small>
             </button>
           ))}

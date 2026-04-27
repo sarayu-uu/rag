@@ -11,13 +11,13 @@ export const ROLE_DEFINITIONS = {
     label: "Admin",
     tone: "Command",
     description: "Owns global operations, access, and oversight across the workspace.",
-    navigation: ["dashboard", "documents", "chat", "profile", "users", "permissions"],
+    navigation: ["dashboard", "documents", "chat", "profile", "users", "permissions", "telemetry"],
   },
   [ROLE_KEYS.MANAGER]: {
     label: "Manager",
     tone: "Control",
     description: "Manages teams, documents, and permission policies for business workflows.",
-    navigation: ["dashboard", "documents", "chat", "profile", "users", "permissions"],
+    navigation: ["dashboard", "documents", "chat", "profile", "users", "permissions", "telemetry"],
   },
   [ROLE_KEYS.ANALYST]: {
     label: "Analyst",

@@ -6,8 +6,10 @@ File purpose:
 
 from __future__ import annotations
 
+from time import perf_counter
+
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -30,8 +32,10 @@ class RetrievalSearchRequest(BaseModel):
 @router.post("/search", summary="Phase 4: Search indexed chunks in the vector store")
 def search_indexed_chunks(
     payload: RetrievalSearchRequest,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    retrieval_start = perf_counter()
     try:
         ensure_vector_store_ready()
         matches = search_chunk_text(
@@ -43,6 +47,8 @@ def search_indexed_chunks(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Vector store retrieval failed: {exc}") from exc
+
+    response.headers["X-Telemetry-Retrieval-Latency-Ms"] = str(int((perf_counter() - retrieval_start) * 1000))
 
     return {
         "status": "success",
