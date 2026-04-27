@@ -1,11 +1,28 @@
+import { useState } from "react";
 import { ROLE_DEFINITIONS, ROLE_KEYS } from "../../lib/roles";
 
 const ROLE_OPTIONS = [
-  ROLE_KEYS.SUPER_ADMIN,
   ROLE_KEYS.ADMIN,
-  ROLE_KEYS.EDITOR,
+  ROLE_KEYS.MANAGER,
+  ROLE_KEYS.ANALYST,
   ROLE_KEYS.VIEWER,
+  ROLE_KEYS.GUEST,
 ];
+
+function EyeIcon({ open }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="password-visibility-icon">
+      <path
+        d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      {open ? null : <path d="M4 4l16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+    </svg>
+  );
+}
 
 export default function DummyAuthPage({
   mode,
@@ -14,6 +31,8 @@ export default function DummyAuthPage({
   onFieldChange,
   onSubmit,
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+
   return (
     <main className="auth-shell">
       <section className="auth-card panel">
@@ -58,12 +77,23 @@ export default function DummyAuthPage({
 
         <label>
           Password
-          <input
-            type="password"
-            value={form.password}
-            onChange={(event) => onFieldChange("password", event.target.value)}
-            placeholder="••••••••"
-          />
+          <div className="password-field">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={form.password}
+              onChange={(event) => onFieldChange("password", event.target.value)}
+              placeholder="********"
+            />
+            <button
+              type="button"
+              className="password-visibility-toggle"
+              onClick={() => setShowPassword((value) => !value)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              title={showPassword ? "Hide password" : "Show password"}
+            >
+              <EyeIcon open={showPassword} />
+            </button>
+          </div>
         </label>
 
         <label>
@@ -87,4 +117,3 @@ export default function DummyAuthPage({
     </main>
   );
 }
-

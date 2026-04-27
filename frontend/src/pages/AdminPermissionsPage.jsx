@@ -1,0 +1,161 @@
+import { useEffect, useState } from "react";
+import SectionHeader from "../components/common/SectionHeader";
+import { getDocuments, updateDocumentPermissions } from "../lib/api";
+
+const INITIAL_FORM = {
+  user_id: "",
+  role_id: "",
+  can_read: true,
+  can_query: true,
+  can_edit: false,
+};
+
+export default function AdminPermissionsPage() {
+  const [documents, setDocuments] = useState([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState("");
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function loadDocuments() {
+    try {
+      const response = await getDocuments();
+      const docs = response.documents || [];
+      setDocuments(docs);
+      if (!selectedDocumentId && docs[0]?.id) {
+        setSelectedDocumentId(String(docs[0].id));
+      }
+    } catch (documentsError) {
+      setError(documentsError.message || "Failed to load documents.");
+    }
+  }
+
+  useEffect(() => {
+    loadDocuments();
+  }, []);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!selectedDocumentId) {
+      setError("Choose a document first.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    setSuccess("");
+    try {
+      await updateDocumentPermissions(Number(selectedDocumentId), {
+        user_id: form.user_id ? Number(form.user_id) : null,
+        role_id: form.role_id ? Number(form.role_id) : null,
+        can_read: form.can_read,
+        can_query: form.can_query,
+        can_edit: form.can_edit,
+      });
+      setSuccess("Permission rule updated successfully.");
+    } catch (permissionError) {
+      setError(permissionError.message || "Failed to update permissions.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="page-stack">
+      <SectionHeader
+        eyebrow="Governance"
+        title="Document permissions"
+        description="Apply role or user specific read, query, and edit controls using the backend permission endpoint."
+      />
+
+      {error ? <div className="error-banner">{error}</div> : null}
+      {success ? <div className="success-banner">{success}</div> : null}
+
+      <section className="content-grid sidebar-layout">
+        <article className="feature-card">
+          <div className="feature-card-header">
+            <div>
+              <p className="eyebrow">Target</p>
+              <h2>Select a document</h2>
+            </div>
+          </div>
+          <div className="document-selector-list">
+            {documents.map((document) => (
+              <button
+                key={document.id}
+                className={`session-row ${String(document.id) === selectedDocumentId ? "active" : ""}`}
+                onClick={() => setSelectedDocumentId(String(document.id))}
+              >
+                <strong>{document.title}</strong>
+                <span>{document.file_type} | {document.status}</span>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className="feature-card">
+          <div className="feature-card-header">
+            <div>
+              <p className="eyebrow">Policy patch</p>
+              <h2>Update permission rule</h2>
+            </div>
+          </div>
+
+          <form className="auth-form compact-form" onSubmit={handleSubmit}>
+            <label>
+              <span>User ID</span>
+              <input
+                type="number"
+                value={form.user_id}
+                onChange={(event) => setForm((value) => ({ ...value, user_id: event.target.value }))}
+                placeholder="Optional"
+              />
+            </label>
+
+            <label>
+              <span>Role ID</span>
+              <input
+                type="number"
+                value={form.role_id}
+                onChange={(event) => setForm((value) => ({ ...value, role_id: event.target.value }))}
+                placeholder="Optional"
+              />
+            </label>
+
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={form.can_read}
+                onChange={(event) => setForm((value) => ({ ...value, can_read: event.target.checked }))}
+              />
+              <span>Can read</span>
+            </label>
+
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={form.can_query}
+                onChange={(event) => setForm((value) => ({ ...value, can_query: event.target.checked }))}
+              />
+              <span>Can query</span>
+            </label>
+
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={form.can_edit}
+                onChange={(event) => setForm((value) => ({ ...value, can_edit: event.target.checked }))}
+              />
+              <span>Can edit</span>
+            </label>
+
+            <button type="submit" disabled={submitting}>
+              {submitting ? "Updating..." : "Apply permission rule"}
+            </button>
+          </form>
+        </article>
+      </section>
+    </div>
+  );
+}
