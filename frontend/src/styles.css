@@ -745,6 +745,57 @@ button:disabled {
   min-height: 0;
 }
 
+.quality-report-card {
+  display: grid;
+  gap: 10px;
+}
+
+.quality-report-head {
+  display: grid;
+  gap: 3px;
+}
+
+.quality-input {
+  display: grid;
+  gap: 6px;
+}
+
+.quality-input span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.quality-input textarea {
+  min-height: 78px;
+}
+
+.quality-metrics {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.quality-metrics h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #dcecff;
+}
+
+.quality-list {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 7px;
+  color: #bfd3e8;
+  line-height: 1.45;
+}
+
+.error-copy {
+  margin: 0;
+  color: #ff9a9a;
+  font-size: 0.9rem;
+}
+
 .source-aggregate {
   min-height: 0;
   max-height: 100%;

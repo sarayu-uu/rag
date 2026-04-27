@@ -1,9 +1,17 @@
 import EmptyState from "../common/EmptyState";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { evaluateQualityReport } from "../../lib/api";
+import { useAuth } from "../../context/AuthContext";
 
 export default function SourcePanel({ answerPayload }) {
+  const { user } = useAuth();
   const [hoveredCitation, setHoveredCitation] = useState(null);
+  const [qualityReport, setQualityReport] = useState(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const canViewQuality =
+    user?.role === "Admin" || user?.role === "SuperAdmin" || user?.role === "Super Admin";
   const sources = answerPayload?.sources || [];
   const matches = answerPayload?.matches || [];
   const retrievalMethods = Array.from(new Set(sources.map((source) => source.retrieval_method).filter(Boolean)));
@@ -68,6 +76,37 @@ export default function SourcePanel({ answerPayload }) {
     setHoveredCitation(null);
   }
 
+  useEffect(() => {
+    setQualityReport(null);
+    setReportError("");
+  }, [answerPayload?.question]);
+
+  async function handleGenerateQualityReport() {
+    const question = String(answerPayload?.question || "").trim();
+    if (!question) {
+      setReportError("No question available for evaluation yet.");
+      return;
+    }
+
+    setLoadingReport(true);
+    setReportError("");
+    try {
+      const report = await evaluateQualityReport({
+        question,
+        limit: 5,
+        includeRagas: false,
+      });
+      setQualityReport(report);
+    } catch (error) {
+      setReportError(error.message || "Failed to generate quality report.");
+    } finally {
+      setLoadingReport(false);
+    }
+  }
+
+  const metricGuide = qualityReport?.metric_guide || {};
+  const retrievalSummary = qualityReport?.retrieval_summary || null;
+
   return (
     <>
       <section className="feature-card source-card">
@@ -88,6 +127,51 @@ export default function SourcePanel({ answerPayload }) {
           />
         ) : (
           <div className="source-stack">
+            {canViewQuality ? (
+              <div className="source-row quality-report-card">
+              <div className="quality-report-head">
+                <strong>Quality Report</strong>
+                <small>Fast retrieval scoring for this answer (RAGAS is available in Telemetry).</small>
+              </div>
+              <button className="inline-link-button" type="button" onClick={handleGenerateQualityReport} disabled={loadingReport}>
+                {loadingReport ? "Generating..." : "Quality Report"}
+              </button>
+              {reportError ? <p className="error-copy">{reportError}</p> : null}
+
+              {qualityReport ? (
+                <div className="quality-metrics">
+                  <h3>Retrieval Metrics</h3>
+                  {retrievalSummary ? (
+                    <ul className="quality-list">
+                      <li>
+                        <strong>Top rerank score:</strong> {retrievalSummary.top_rerank_score?.toFixed?.(4) ?? retrievalSummary.top_rerank_score}
+                        . {metricGuide.rerank_score || "This is the highest hybrid relevance score among selected chunks."} Range: typically 0.00 to 1.15, higher is better.
+                      </li>
+                      <li>
+                        <strong>Average rerank score:</strong> {retrievalSummary.avg_rerank_score?.toFixed?.(4) ?? retrievalSummary.avg_rerank_score}
+                        . {metricGuide.avg_rerank_score || "This is the mean hybrid relevance across selected chunks."} Range: typically 0.00 to 1.15, higher is better.
+                      </li>
+                      <li>
+                        <strong>Best semantic distance:</strong>{" "}
+                        {retrievalSummary.best_semantic_distance?.toFixed?.(4) ?? retrievalSummary.best_semantic_distance}.{" "}
+                        {metricGuide.semantic_distance || "Lower distance means stronger semantic similarity."} Range: 0.00 and above, lower is better.
+                      </li>
+                      <li>
+                        <strong>Retrieval latency:</strong> {retrievalSummary.retrieval_latency_ms} ms. This is the time taken to retrieve and rank chunks. Range: 0 ms and above, lower is faster.
+                      </li>
+                      <li>
+                        <strong>Semantic/Keyword/Hybrid candidates:</strong>{" "}
+                        {retrievalSummary.retrieval_debug?.semantic_match_count ?? 0}/
+                        {retrievalSummary.retrieval_debug?.keyword_match_count ?? 0}/
+                        {retrievalSummary.retrieval_debug?.hybrid_match_count ?? 0}. These are candidate counts at each retrieval stage. Range: whole numbers 0 and above.
+                      </li>
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            ) : null}
+
             <div className="source-row source-aggregate">
               <strong>Retrieved Sources ({sources.length})</strong>
               <small>Matches retrieved: {answerPayload.retrieved_match_count ?? answerPayload.match_count ?? 0}</small>

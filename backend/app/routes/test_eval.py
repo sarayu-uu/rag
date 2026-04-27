@@ -11,12 +11,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.auth.security import get_current_user, is_privileged_user
-from app.models.mysql import User
+from app.auth.security import get_current_user
+from app.models.mysql import RoleName, User
 from app.retrieval.embeddings import embed_query, embed_texts
 from app.services.rag_chat import answer_question_with_retrieval
 
 router = APIRouter(prefix="/test", tags=["test"])
+RAGAS_METRIC_KEYS = {"faithfulness", "answer_relevancy", "context_precision", "context_recall"}
 
 
 class EvalRequest(BaseModel):
@@ -29,6 +30,12 @@ class EvalRequest(BaseModel):
         ),
     )
     limit: int = Field(default=5, ge=1, le=20, description="Maximum chunks used for final grounded answer.")
+    include_ragas: bool = Field(
+        default=True,
+        description=(
+            "Whether to run RAGAS metrics. Set false for a fast retrieval-only report."
+        ),
+    )
 
 
 class RetrievalScoreItem(BaseModel):
@@ -104,9 +111,17 @@ def _extract_ragas_metrics(result: Any) -> dict[str, float]:
         frame = result.to_pandas()
         if not frame.empty:
             row = frame.iloc[0].to_dict()
-            return {str(key): _safe_float(value) for key, value in row.items() if value is not None}
+            return {
+                str(key): _safe_float(value)
+                for key, value in row.items()
+                if value is not None and str(key) in RAGAS_METRIC_KEYS
+            }
     if isinstance(result, dict):
-        return {str(key): _safe_float(value) for key, value in result.items()}
+        return {
+            str(key): _safe_float(value)
+            for key, value in result.items()
+            if str(key) in RAGAS_METRIC_KEYS
+        }
     return {}
 
 
@@ -122,8 +137,8 @@ def _run_ragas(
         from ragas import evaluate
         from ragas.embeddings import LangchainEmbeddingsWrapper
         from ragas.llms import LangchainLLMWrapper
-        from ragas.metrics import answer_relevancy, context_precision, faithfulness
-    except Exception as exc:
+        from ragas.metrics import answer_relevancy, faithfulness
+    except Exception:
         return RagasSummary(
             status="failed",
             detail=(
@@ -134,7 +149,7 @@ def _run_ragas(
             skipped_metrics=[],
         )
 
-    metric_objects: list[Any] = [faithfulness, answer_relevancy, context_precision]
+    metric_objects: list[Any] = [faithfulness, answer_relevancy]
     skipped_metrics: list[str] = []
     row: dict[str, Any] = {
         "question": question,
@@ -146,13 +161,18 @@ def _run_ragas(
         row["ground_truth"] = ground_truth.strip()
         row["reference"] = ground_truth.strip()
         try:
-            from ragas.metrics import context_recall
+            from ragas.metrics import context_precision, context_recall
 
-            metric_objects.append(context_recall)
+            metric_objects.extend([context_precision, context_recall])
         except Exception:
-            skipped_metrics.append("context_recall")
+            skipped_metrics.extend(["context_precision", "context_recall"])
     else:
-        skipped_metrics.append("context_recall (needs ground_truth)")
+        skipped_metrics.extend(
+            [
+                "context_precision (needs ground_truth)",
+                "context_recall (needs ground_truth)",
+            ]
+        )
 
     try:
         from app.services.chatgroq_bot import build_chat_model
@@ -196,6 +216,10 @@ def evaluate_rag(
     payload: EvalRequest,
     current_user: User = Depends(get_current_user),
 ) -> EvalResponse:
+    role_name = current_user.role.name if current_user.role else None
+    if role_name != RoleName.ADMIN:
+        raise HTTPException(status_code=403, detail="Quality evaluation is available only to admin users.")
+
     try:
         result = answer_question_with_retrieval(
             payload.question,
@@ -224,12 +248,20 @@ def evaluate_rag(
     semantic_distances = [item.semantic_distance for item in sources]
     contexts = [str(match.get("content", "")) for match in selected_matches if str(match.get("content", "")).strip()]
 
-    ragas_summary = _run_ragas(
-        question=payload.question,
-        answer=str(result.get("answer", "")),
-        contexts=contexts,
-        ground_truth=payload.ground_truth,
-    )
+    if payload.include_ragas:
+        ragas_summary = _run_ragas(
+            question=payload.question,
+            answer=str(result.get("answer", "")),
+            contexts=contexts,
+            ground_truth=payload.ground_truth,
+        )
+    else:
+        ragas_summary = RagasSummary(
+            status="skipped",
+            detail="RAGAS execution was disabled for this request.",
+            metrics={},
+            skipped_metrics=["faithfulness", "answer_relevancy", "context_precision", "context_recall"],
+        )
 
     retrieval_summary = RetrievalSummary(
         retrieved_match_count=int(result.get("retrieved_match_count", len(selected_matches))),

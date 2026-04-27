@@ -204,6 +204,19 @@ export async function queryChat({ question, limit = 5, sessionId = null }) {
   });
 }
 
+export async function evaluateQualityReport({ question, groundTruth = "", limit = 5, includeRagas = true }) {
+  const payload = {
+    question,
+    limit,
+    include_ragas: Boolean(includeRagas),
+    ...(groundTruth.trim() ? { ground_truth: groundTruth.trim() } : {}),
+  };
+  return request("/test/evaluate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getUsers() {
   return request("/admin/users", {
     method: "GET",
