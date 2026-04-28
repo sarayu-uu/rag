@@ -37,6 +37,7 @@ export default function SignupPage() {
           email: form.email,
           otp: response.otp,
           otpDelivery: response.otp_delivery,
+          message: response.message,
         },
       });
     } catch (signupError) {

@@ -1,7 +1,7 @@
 """
 File purpose:
 - Exposes Phase 13 auth endpoints for signup, verification, login, refresh, and me.
-- Uses JWT plus a development OTP flow so the app can operate before SMTP is added.
+- Uses JWT plus OTP verification for account activation.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from app.auth.security import (
     hash_password,
     verify_password,
 )
+from app.services.email_service import is_smtp_configured, send_signup_otp_email
 from app.models.mysql import Role, RoleName, User, get_db
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -92,7 +93,7 @@ def _get_user_by_email(db: Session, email: str) -> User | None:
     )
 
 
-@router.post("/signup", summary="Phase 13: Register a user and issue a development OTP")
+@router.post("/signup", summary="Phase 13: Register a user and send an OTP")
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     normalized_email = _normalize_email(payload.email)
     existing_by_email = _get_user_by_email(db, normalized_email)
@@ -104,6 +105,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
         raise HTTPException(status_code=409, detail="A user with this username already exists.")
 
     role = _get_signup_role(db)
+    otp = _generate_otp()
     user = User(
         username=payload.username.strip(),
         email=normalized_email,
@@ -112,11 +114,8 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
         is_active=False,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
-    user = _get_user_by_email(db, user.email) or user
+    db.flush()
 
-    otp = _generate_otp()
     OTP_STORE[user.email] = {
         "otp": otp,
         "user_id": user.id,
@@ -124,13 +123,35 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES)).isoformat(),
     }
 
-    return {
+    delivery_mode = "development_inline"
+    response_payload: dict[str, Any] = {
         "status": "success",
         "message": "Signup successful. Verify the OTP to activate the account.",
-        "user": _serialize_user(user),
-        "otp_delivery": "development_inline",
-        "otp": otp,
+        "otp_delivery": delivery_mode,
         "otp_expires_in_minutes": OTP_EXPIRY_MINUTES,
+    }
+
+    try:
+        if is_smtp_configured():
+            send_signup_otp_email(user.email, otp, OTP_EXPIRY_MINUTES)
+            delivery_mode = "email"
+            response_payload["message"] = "Signup successful. An OTP has been sent to your email."
+            response_payload["otp_delivery"] = delivery_mode
+        else:
+            response_payload["otp"] = otp
+
+        db.commit()
+    except Exception:
+        OTP_STORE.pop(user.email, None)
+        db.rollback()
+        raise
+
+    db.refresh(user)
+    user = _get_user_by_email(db, user.email) or user
+
+    response_payload["user"] = _serialize_user(user)
+    return {
+        **response_payload,
     }
 
 
