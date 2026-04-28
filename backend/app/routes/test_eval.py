@@ -224,7 +224,7 @@ def evaluate_rag(
         result = answer_question_with_retrieval(
             payload.question,
             limit=payload.limit,
-            owner_user_id=None
+            owner_user_id=None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

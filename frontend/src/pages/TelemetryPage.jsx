@@ -256,26 +256,21 @@ export default function TelemetryPage() {
               <ul className="quality-list">
                 <li>
                   <strong>Top rerank score:</strong> {Number(evalResult.retrieval_summary?.top_rerank_score ?? 0).toFixed(4)}.
-                  Range: typically 0.00 to 1.15, higher is better.
                 </li>
                 <li>
                   <strong>Average rerank score:</strong> {Number(evalResult.retrieval_summary?.avg_rerank_score ?? 0).toFixed(4)}.
-                  Range: typically 0.00 to 1.15, higher is better.
                 </li>
                 <li>
                   <strong>Best semantic distance:</strong> {Number(evalResult.retrieval_summary?.best_semantic_distance ?? 0).toFixed(4)}.
-                  Range: 0.00 and above, lower is better.
                 </li>
                 <li>
                   <strong>Retrieval latency:</strong> {evalResult.retrieval_summary?.retrieval_latency_ms ?? 0} ms.
-                  Range: 0 ms and above, lower is faster.
                 </li>
                 <li>
                   <strong>Semantic/Keyword/Hybrid candidates:</strong>{" "}
                   {evalResult.retrieval_summary?.retrieval_debug?.semantic_match_count ?? 0}/
                   {evalResult.retrieval_summary?.retrieval_debug?.keyword_match_count ?? 0}/
                   {evalResult.retrieval_summary?.retrieval_debug?.hybrid_match_count ?? 0}.
-                  Range: whole numbers 0 and above.
                 </li>
               </ul>
 
@@ -286,19 +281,15 @@ export default function TelemetryPage() {
                 <ul className="quality-list">
                   <li>
                     <strong>Faithfulness:</strong> {Number(evalResult.ragas?.metrics?.faithfulness ?? 0).toFixed(4)}.
-                    Range: 0.00 to 1.00, higher means better grounding.
                   </li>
                   <li>
                     <strong>Answer relevancy:</strong> {Number(evalResult.ragas?.metrics?.answer_relevancy ?? 0).toFixed(4)}.
-                    Range: 0.00 to 1.00, higher means the answer better matches the question.
                   </li>
                   <li>
                     <strong>Context precision:</strong> {Number(evalResult.ragas?.metrics?.context_precision ?? 0).toFixed(4)}.
-                    Range: 0.00 to 1.00, higher means retrieved chunks are more focused and relevant.
                   </li>
                   <li>
                     <strong>Context recall:</strong> {Number(evalResult.ragas?.metrics?.context_recall ?? 0).toFixed(4)}.
-                    Range: 0.00 to 1.00, higher means retrieved context covers more of the expected answer.
                   </li>
                 </ul>
               )}

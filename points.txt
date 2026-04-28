@@ -5,3 +5,43 @@ It does hybrid retrieval:
 semantic vector search (search_chunk_text)
 keyword search (keyword_search_chunk_text)
 Then applies weighted reranking (semantic + keyword + small content-length bonus).
+
+
+how are the retirval metrics calculated?
+9:59 AM
+
+
+In your code, retrieval metrics come from backend/app/services/rag_chat.py and backend/app/routes/test_eval.py.
+
+Semantic score normalization
+Raw semantic score from Chroma is a distance (lower is better).
+Normalized as:
+semantic_norm = max(0, 1 - (distance / max_distance_in_batch))
+Keyword score normalization
+Raw keyword score from keyword search is higher-better.
+Normalized as:
+keyword_norm = keyword_score / max_keyword_score_in_batch
+Hybrid rerank score
+For each merged candidate:
+rerank_score = semantic_norm * 0.65 + keyword_norm * 0.35 + content_bonus
+where:
+content_bonus = min(len(content)/1000, 0.15)
+Sorting
+Candidates are sorted by:
+higher rerank_score first
+then document_id, chunk_index
+Reported retrieval metrics
+In /test/evaluate:
+top_rerank_score = max of selected chunks’ rerank_score
+avg_rerank_score = average of selected chunks’ rerank_score
+best_semantic_distance = minimum selected raw semantic score
+retrieval_latency_ms = total time for semantic + keyword + merge + selection
+retrieval_debug.semantic_match_count = count from semantic search
+retrieval_debug.keyword_match_count = count from keyword search
+retrieval_debug.hybrid_match_count = count after merging both sets
+Important nuance:
+
+best_semantic_distance uses raw distance from stored match["score"].
+For pure keyword rows, that same score field may represent keyword score, so interpret per retrieval_method.
+
+
