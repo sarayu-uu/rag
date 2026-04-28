@@ -205,7 +205,7 @@ def _run_ragas(
 @router.post(
     "/evaluate",
     response_model=EvalResponse,
-    summary="Test: Evaluate retrieval relevance + RAGAS in one endpoint",
+    summary="Evaluate retrieval relevance and optional RAGAS metrics",
     description=(
         "Runs your live RAG pipeline for one question, then returns:\n"
         "1) retrieval relevance scores (semantic distance + hybrid rerank), and\n"

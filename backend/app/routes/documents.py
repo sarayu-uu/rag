@@ -56,7 +56,7 @@ def _get_document_with_chunk_count(
     return row[0], int(row[1] or 0)
 
 
-@router.post("/upload", summary="Phase 12: Upload a document through the default ingestion pipeline")
+@router.post("/upload", summary="Upload document and run default ingestion pipeline")
 def upload_document(
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
@@ -78,7 +78,7 @@ def upload_document(
     )
 
 
-@router.get("", summary="Phase 12: List stored documents")
+@router.get("", summary="List stored documents")
 def list_documents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -102,7 +102,7 @@ def list_documents(
     }
 
 
-@router.get("/{document_id}", summary="Phase 12: Get one stored document")
+@router.get("/{document_id}", summary="Get one stored document")
 def get_document(
     document_id: int,
     db: Session = Depends(get_db),
@@ -119,7 +119,7 @@ def get_document(
     }
 
 
-@router.delete("/{document_id}", summary="Phase 12: Delete a stored document and its vectors")
+@router.delete("/{document_id}", summary="Delete a stored document and its vectors")
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),

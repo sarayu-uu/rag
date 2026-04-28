@@ -93,7 +93,7 @@ def _get_user_by_email(db: Session, email: str) -> User | None:
     )
 
 
-@router.post("/signup", summary="Phase 13: Register a user and send an OTP")
+@router.post("/signup", summary="Register a user and send an OTP")
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     normalized_email = _normalize_email(payload.email)
     existing_by_email = _get_user_by_email(db, normalized_email)
@@ -155,7 +155,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
     }
 
 
-@router.post("/verify-otp", summary="Phase 13: Verify a signup OTP and activate the account")
+@router.post("/verify-otp", summary="Verify signup OTP and activate the account")
 def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     email = _normalize_email(payload.email)
     record = OTP_STORE.get(email)
@@ -185,7 +185,7 @@ def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict
     }
 
 
-@router.post("/login", summary="Phase 13: Authenticate a verified user and issue JWTs")
+@router.post("/login", summary="Authenticate user and issue JWT tokens")
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     user = _get_user_by_email(db, _normalize_email(payload.email))
     if user is None or not verify_password(payload.password, user.password_hash):
@@ -202,7 +202,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any
     }
 
 
-@router.post("/refresh", summary="Phase 13: Exchange a refresh token for a new access token")
+@router.post("/refresh", summary="Exchange refresh token for a new access token")
 def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     token_payload = decode_token(payload.refresh_token)
     if token_payload.get("type") != "refresh":
@@ -225,7 +225,7 @@ def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)) -> dic
     }
 
 
-@router.get("/me", summary="Phase 13: Get the authenticated user profile")
+@router.get("/me", summary="Get authenticated user profile")
 def get_me(current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     return {
         "status": "success",

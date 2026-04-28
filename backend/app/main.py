@@ -75,7 +75,7 @@ async def root():
     return {"message": "RAG Ingestion API is running", "docs": "/docs"}
 
 
-@app.get("/health", tags=["system"])
+@app.get("/health", tags=["system"], summary="Check API, database, and optional vector-store health")
 async def health(include_vector_store: bool = False):
     database_status = {"status": "ok", "database": "connected"}
     try:
