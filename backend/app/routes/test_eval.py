@@ -224,7 +224,7 @@ def evaluate_rag(
         result = answer_question_with_retrieval(
             payload.question,
             limit=payload.limit,
-            owner_user_id=None if is_privileged_user(current_user) else current_user.id,
+            owner_user_id=None
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
