@@ -145,25 +145,25 @@ export default function SourcePanel({ answerPayload }) {
                     <ul className="quality-list">
                       <li>
                         <strong>Top rerank score:</strong> {retrievalSummary.top_rerank_score?.toFixed?.(4) ?? retrievalSummary.top_rerank_score}
-                        . {metricGuide.rerank_score || "This is the highest hybrid relevance score among selected chunks."} Range: typically 0.00 to 1.15, higher is better.
+                        . {metricGuide.rerank_score || "This is the highest hybrid relevance score among selected chunks."}
                       </li>
                       <li>
                         <strong>Average rerank score:</strong> {retrievalSummary.avg_rerank_score?.toFixed?.(4) ?? retrievalSummary.avg_rerank_score}
-                        . {metricGuide.avg_rerank_score || "This is the mean hybrid relevance across selected chunks."} Range: typically 0.00 to 1.15, higher is better.
+                        . {metricGuide.avg_rerank_score || "This is the mean hybrid relevance across selected chunks."}
                       </li>
                       <li>
                         <strong>Best semantic distance:</strong>{" "}
                         {retrievalSummary.best_semantic_distance?.toFixed?.(4) ?? retrievalSummary.best_semantic_distance}.{" "}
-                        {metricGuide.semantic_distance || "Lower distance means stronger semantic similarity."} Range: 0.00 and above, lower is better.
+                        {metricGuide.semantic_distance || "Lower distance means stronger semantic similarity."}
                       </li>
                       <li>
-                        <strong>Retrieval latency:</strong> {retrievalSummary.retrieval_latency_ms} ms. This is the time taken to retrieve and rank chunks. Range: 0 ms and above, lower is faster.
+                        <strong>Retrieval latency:</strong> {retrievalSummary.retrieval_latency_ms} ms. This is the time taken to retrieve and rank chunks.
                       </li>
                       <li>
                         <strong>Semantic/Keyword/Hybrid candidates:</strong>{" "}
                         {retrievalSummary.retrieval_debug?.semantic_match_count ?? 0}/
                         {retrievalSummary.retrieval_debug?.keyword_match_count ?? 0}/
-                        {retrievalSummary.retrieval_debug?.hybrid_match_count ?? 0}. These are candidate counts at each retrieval stage. Range: whole numbers 0 and above.
+                        {retrievalSummary.retrieval_debug?.hybrid_match_count ?? 0}. These are candidate counts at each retrieval stage.
                       </li>
                     </ul>
                   ) : null}
