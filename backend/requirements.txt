@@ -23,3 +23,5 @@ sqlalchemy
 pymysql
 bcrypt
 python-jose[cryptography]
+ragas
+datasets

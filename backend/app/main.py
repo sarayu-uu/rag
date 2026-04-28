@@ -19,6 +19,7 @@ from app.routes.documents import router as documents_router
 from app.routes.ingestion_steps import router as ingestion_steps_router
 from app.routes.metrics import router as metrics_router
 from app.routes.retrieval import router as retrieval_router
+from app.routes.test_eval import router as test_eval_router
 from app.retrieval.chroma_store import vector_store_health
 from app.telemetry.middleware import telemetry_middleware
 
@@ -66,6 +67,7 @@ app.include_router(retrieval_router)
 app.include_router(chat_router)
 app.include_router(admin_router)
 app.include_router(metrics_router)
+app.include_router(test_eval_router)
 
 
 @app.get("/", tags=["system"])
