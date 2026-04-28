@@ -6,15 +6,17 @@ File purpose:
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.security import get_current_user, is_privileged_user
 from app.models.mysql import MetricUsage, RequestType, User, get_db
+from app.telemetry.service import build_telemetry_summary
 
 router = APIRouter(tags=["metrics"])
 
@@ -81,3 +83,21 @@ def get_metrics(
         "by_request_type": by_request_type,
         "scope": "global" if is_privileged_user(current_user) else "current_user",
     }
+
+
+@router.get("/telemetry", summary="Phase 10: Telemetry and observability summary from metrics_usage")
+def get_telemetry(
+    hours: int = Query(default=24, ge=1, le=24 * 30),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    if not is_privileged_user(current_user):
+        raise HTTPException(status_code=403, detail="Telemetry is available only to admin and manager roles.")
+
+    payload = build_telemetry_summary(
+        db,
+        current_user=current_user,
+        hours=hours,
+    )
+    payload["generated_at_utc"] = datetime.utcnow().isoformat()
+    return payload

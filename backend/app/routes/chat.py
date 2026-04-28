@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from app.services.chat_history import (
     serialize_session,
 )
 from app.services.rag_chat import answer_question_from_matches, answer_question_with_retrieval
+from app.telemetry.service import estimate_cost, estimate_token_count
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -81,6 +82,7 @@ def generate_answer_from_matches(
 @router.post("/query", summary="Phase 6: Search across all indexed documents and generate a grounded answer")
 def chat_query(
     payload: ChatQueryRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
@@ -123,6 +125,19 @@ def chat_query(
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=502, detail=f"RAG query failed: {exc}") from exc
+
+    token_input = estimate_token_count(payload.question)
+    token_output = estimate_token_count(result.get("answer", ""))
+    token_total = token_input + token_output
+    estimated_cost = estimate_cost(token_input, token_output)
+
+    response.headers["X-Telemetry-Session-Id"] = str(session.id)
+    response.headers["X-Telemetry-Token-Input"] = str(token_input)
+    response.headers["X-Telemetry-Token-Output"] = str(token_output)
+    response.headers["X-Telemetry-Token-Total"] = str(token_total)
+    response.headers["X-Telemetry-Estimated-Cost"] = str(estimated_cost)
+    response.headers["X-Telemetry-Retrieval-Latency-Ms"] = str(result.get("retrieval_latency_ms", 0))
+    response.headers["X-Telemetry-Model-Latency-Ms"] = str(result.get("model_latency_ms", 0))
 
     return {
         "status": "success",

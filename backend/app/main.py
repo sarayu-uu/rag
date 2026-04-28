@@ -20,6 +20,7 @@ from app.routes.ingestion_steps import router as ingestion_steps_router
 from app.routes.metrics import router as metrics_router
 from app.routes.retrieval import router as retrieval_router
 from app.retrieval.chroma_store import vector_store_health
+from app.telemetry.middleware import telemetry_middleware
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(telemetry_middleware)
 
 app.include_router(auth_router)
 app.include_router(documents_router)

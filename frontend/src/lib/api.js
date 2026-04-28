@@ -143,6 +143,12 @@ export async function getMetrics() {
   });
 }
 
+export async function getTelemetry({ hours = 24 } = {}) {
+  return request(`/telemetry?hours=${hours}`, {
+    method: "GET",
+  });
+}
+
 export async function getDocuments() {
   return request("/documents", {
     method: "GET",

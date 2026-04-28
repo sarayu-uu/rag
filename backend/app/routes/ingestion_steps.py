@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
 import shutil
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -539,6 +540,7 @@ def _run_upload_pipeline(
 
 @router.post("/uploadtochunk", summary="Step 1 to 3: Load, clean, and chunk in one request")
 def upload_to_chunk(
+    response: Response,
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
     permissions_tags: str | None = Form(default=None),
@@ -547,7 +549,8 @@ def upload_to_chunk(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return _run_upload_pipeline(
+    started = perf_counter()
+    payload = _run_upload_pipeline(
         file=file,
         url=url,
         permissions_tags=permissions_tags,
@@ -557,10 +560,14 @@ def upload_to_chunk(
         index_in_vector_store=False,
         upload_user=current_user,
     )
+    if response is not None:
+        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - started) * 1000))
+    return payload
 
 
 @router.post("/upload", summary="Default upload: store document, chunks, and vectors automatically")
 def upload_document(
+    response: Response,
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
     permissions_tags: str | None = Form(default=None),
@@ -569,7 +576,8 @@ def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return _run_upload_pipeline(
+    started = perf_counter()
+    payload = _run_upload_pipeline(
         file=file,
         url=url,
         permissions_tags=permissions_tags,
@@ -579,16 +587,21 @@ def upload_document(
         index_in_vector_store=True,
         upload_user=current_user,
     )
+    if response is not None:
+        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - started) * 1000))
+    return payload
 
 
 @router.post("/upload-batch", summary="Batch upload: store multiple documents, chunks, and vectors")
 def upload_documents_batch(
+    response: Response,
     files: list[UploadFile] = File(default_factory=list),
     permissions_tags: str | None = Form(default=None),
     chunk_size: int = Form(default=500),
     chunk_overlap: int = Form(default=100),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    started = perf_counter()
     if not files:
         raise HTTPException(status_code=400, detail="No files received. Use form field name 'files'.")
 
@@ -642,7 +655,7 @@ def upload_documents_batch(
             )
             failure_count += 1
 
-    return {
+    payload = {
         "status": "success" if failure_count == 0 else "partial_success",
         "total_files": len(files),
         "processed_files": success_count + failure_count,
@@ -650,6 +663,9 @@ def upload_documents_batch(
         "failure_count": failure_count,
         "results": results,
     }
+    if response is not None:
+        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - started) * 1000))
+    return payload
 
 
 @router.post("/clean", summary="Step 2: Clean and normalize extracted text")

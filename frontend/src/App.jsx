@@ -13,6 +13,7 @@ import LoginPage from "./pages/LoginPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import ProfilePage from "./pages/ProfilePage";
 import SignupPage from "./pages/SignupPage";
+import TelemetryPage from "./pages/TelemetryPage";
 import VerifyOtpPage from "./pages/VerifyOtpPage";
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route path="/admin/users" element={<AdminUsersPage />} />
             <Route path="/admin/permissions" element={<AdminPermissionsPage />} />
+            <Route path="/telemetry" element={<TelemetryPage />} />
           </Route>
         </Route>
 

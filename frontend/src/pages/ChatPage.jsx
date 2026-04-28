@@ -15,6 +15,7 @@ export default function ChatPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const activeSession = sessions.find((session) => session.session_id === activeSessionId) || null;
 
   async function loadSessions() {
     setLoadingSessions(true);
@@ -86,7 +87,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack chat-page">
       <SectionHeader
         eyebrow="RAG chat"
         title="Chat with your indexed knowledge"
@@ -105,24 +106,30 @@ export default function ChatPage() {
         />
 
         <div className="chat-center-column">
-          <ChatTranscript messages={messages} pendingAnswer={sending ? "Generating a grounded answer..." : ""} loading={loadingMessages} />
-
-          <form className="composer-card" onSubmit={handleAsk}>
-            <label>
-              <span className="eyebrow">Question</span>
-              <textarea
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder="Ask a question about your uploaded documents..."
-              />
-            </label>
-            <div className="composer-actions">
-              <small>{activeSessionId ? `Continuing session ${activeSessionId}` : "A new session will be created."}</small>
-              <button type="submit" disabled={sending || !question.trim()}>
-                {sending ? "Sending..." : "Ask with citations"}
-              </button>
-            </div>
-          </form>
+          <ChatTranscript messages={messages} pendingAnswer={sending ? "Generating a grounded answer..." : ""} loading={loadingMessages}>
+            <form className="compact-form" onSubmit={handleAsk}>
+              <label>
+                <span className="eyebrow">Question</span>
+                <textarea
+                  value={question}
+                  onChange={(event) => setQuestion(event.target.value)}
+                  placeholder="Ask a question about your uploaded documents..."
+                />
+              </label>
+              <div className="composer-actions">
+                <small>
+                  {activeSessionId
+                    ? `Continuing session ${activeSessionId} - Tokens: ${activeSession?.tokens_used_total ?? 0}${
+                        typeof activeSession?.token_limit === "number" ? ` / ${activeSession.token_limit}` : ""
+                      }`
+                    : "A new session will be created."}
+                </small>
+                <button type="submit" disabled={sending || !question.trim()}>
+                  {sending ? "Sending..." : "Ask with citations"}
+                </button>
+              </div>
+            </form>
+          </ChatTranscript>
         </div>
 
         <SourcePanel answerPayload={answerPayload} />
