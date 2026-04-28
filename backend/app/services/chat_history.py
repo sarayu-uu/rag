@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.mysql import ChatMessage, ChatSession, MessageRole, SessionStatus
 
 CHAT_TOKEN_LIMIT = 10000
-DEFAULT_MESSAGE_TOKEN_COUNT = 100
 RECENT_MESSAGE_LIMIT = 6
 OLDER_SUMMARY_LIMIT = 1200
 SESSION_TITLE_WORDS = 3
@@ -23,6 +22,10 @@ SESSION_TITLE_WORDS = 3
 
 def first_words(text: str, count: int = SESSION_TITLE_WORDS) -> str:
     return " ".join(text.strip().split()[:count])
+
+
+def is_session_at_limit(session: ChatSession) -> bool:
+    return int(session.tokens_used_total or 0) >= int(session.token_limit or CHAT_TOKEN_LIMIT)
 
 
 def create_chat_session(db: Session, *, question: str, user_id: int) -> ChatSession:
@@ -65,8 +68,13 @@ def get_or_create_chat_session(
     if not session.title:
         session.title = first_words(question)
     session.token_limit = CHAT_TOKEN_LIMIT
-    session.status = SessionStatus.ACTIVE
-    session.ended_at = None
+    if is_session_at_limit(session):
+        session.status = SessionStatus.CLOSED_LIMIT
+        if session.ended_at is None:
+            session.ended_at = datetime.utcnow()
+    else:
+        session.status = SessionStatus.ACTIVE
+        session.ended_at = None
     db.flush()
     return session, False
 
@@ -78,7 +86,7 @@ def append_chat_message(
     user_id: int,
     role: MessageRole,
     content: str,
-    token_count: int = DEFAULT_MESSAGE_TOKEN_COUNT,
+    token_count: int = 0,
 ) -> ChatMessage:
     message = ChatMessage(
         session_id=session.id,
@@ -104,8 +112,13 @@ def refresh_session_totals(db: Session, session: ChatSession) -> None:
         or 0
     )
     session.token_limit = CHAT_TOKEN_LIMIT
-    session.status = SessionStatus.ACTIVE
-    session.ended_at = None
+    if is_session_at_limit(session):
+        session.status = SessionStatus.CLOSED_LIMIT
+        if session.ended_at is None:
+            session.ended_at = datetime.utcnow()
+    else:
+        session.status = SessionStatus.ACTIVE
+        session.ended_at = None
     db.flush()
 
 

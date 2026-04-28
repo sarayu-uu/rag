@@ -13,13 +13,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth.security import get_current_user, is_privileged_user
-from app.models.mysql import MessageRole, User, get_db
+from app.models.mysql import ChatSession, MessageRole, User, get_db
 from app.retrieval.service import ensure_vector_store_ready
 from app.services.chat_history import (
     append_chat_message,
     build_memory_context,
     get_or_create_chat_session,
     get_session_messages_payload,
+    is_session_at_limit,
     list_chat_sessions,
     serialize_session,
 )
@@ -94,26 +95,43 @@ def chat_query(
             session_id=payload.session_id,
             user_id=current_user.id,
         )
+        if is_session_at_limit(session):
+            raise HTTPException(status_code=403, detail="100% chat used. Start a new chat to continue.")
         memory_context = build_memory_context(session)
-        append_chat_message(
+        question_for_usage = payload.question.strip()
+        user_message = append_chat_message(
             db,
             session=session,
             user_id=current_user.id,
             role=MessageRole.USER,
-            content=payload.question,
+            content=question_for_usage,
+            token_count=0,
         )
         result = answer_question_with_retrieval(
-            payload.question,
+            question_for_usage,
             limit=payload.limit,
             memory_context=memory_context,
             owner_user_id=None if is_privileged_user(current_user) else current_user.id,
         )
+        token_usage = result.get("token_usage") or {}
+        token_input = int(token_usage.get("input_tokens", 0) or 0)
+        token_output = int(token_usage.get("output_tokens", 0) or 0)
+        token_total = int(token_usage.get("total_tokens", token_input + token_output) or 0)
+
+        if token_total <= 0:
+            token_input = estimate_token_count(question_for_usage)
+            token_output = estimate_token_count(result.get("answer", ""))
+            token_total = token_input + token_output
+
+        user_message.token_count = token_input
+        db.flush()
         append_chat_message(
             db,
             session=session,
             user_id=current_user.id,
             role=MessageRole.ASSISTANT,
             content=result["answer"],
+            token_count=token_output,
         )
         db.commit()
     except LookupError as exc:
@@ -122,13 +140,13 @@ def chat_query(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         raise HTTPException(status_code=502, detail=f"RAG query failed: {exc}") from exc
 
-    token_input = estimate_token_count(payload.question)
-    token_output = estimate_token_count(result.get("answer", ""))
-    token_total = token_input + token_output
     estimated_cost = estimate_cost(token_input, token_output)
 
     response.headers["X-Telemetry-Session-Id"] = str(session.id)
@@ -176,4 +194,24 @@ def get_session_messages(
         "status": "success",
         "user_id": current_user.id,
         **payload,
+    }
+
+
+@router.delete("/sessions/{session_id}", summary="Phase 9: Delete a chat session")
+def delete_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    session = db.get(ChatSession, session_id)
+    if session is None or session.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail=f"Chat session {session_id} was not found.")
+
+    db.delete(session)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "Chat session deleted successfully.",
+        "session_id": session_id,
     }

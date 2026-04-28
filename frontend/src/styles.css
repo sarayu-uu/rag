@@ -544,6 +544,78 @@ a {
   letter-spacing: 0.08em;
 }
 
+.admin-users-row {
+  grid-template-columns: minmax(140px, 1.25fr) minmax(220px, 1.55fr) minmax(120px, 0.9fr) minmax(120px, 0.9fr) minmax(260px, 1.3fr);
+}
+
+.admin-user-cell {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-user-cell strong {
+  font-size: 0.98rem;
+}
+
+.admin-role-chip {
+  margin-top: 0;
+  padding: 7px 12px;
+  font-size: 0.76rem;
+}
+
+.admin-status-chip {
+  padding: 7px 12px;
+  font-size: 0.78rem;
+  border-color: rgba(152, 185, 220, 0.16);
+}
+
+.admin-status-chip.is-pending {
+  background: rgba(255, 140, 66, 0.12);
+  color: #ffd7ba;
+  border-color: rgba(255, 140, 66, 0.18);
+}
+
+.admin-status-dot {
+  width: 8px;
+  height: 8px;
+  box-shadow: none;
+}
+
+.admin-status-dot.is-pending {
+  background: linear-gradient(135deg, #ffb16f, #ef7a31);
+}
+
+.admin-user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-role-select {
+  max-width: 148px;
+  min-width: 0;
+}
+
+.admin-delete-button {
+  padding: 12px 14px;
+  border-radius: 14px;
+  white-space: nowrap;
+  background: rgba(255, 107, 107, 0.1);
+  border-color: rgba(255, 107, 107, 0.18);
+}
+
+.admin-delete-button:hover:not(:disabled) {
+  background: rgba(255, 107, 107, 0.16);
+}
+
+.admin-user-meta {
+  color: var(--muted);
+  font-size: 0.84rem;
+  white-space: nowrap;
+}
+
 .upload-form,
 .auth-form,
 .compact-form {
@@ -696,8 +768,20 @@ button:disabled {
   border: 1px solid var(--line);
   background: rgba(12, 26, 41, 0.88);
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
   color: var(--ink);
+}
+
+.session-select-button {
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 
 .transcript-composer textarea {
@@ -716,6 +800,30 @@ button:disabled {
   font-size: 0.86rem;
 }
 
+.session-usage-meter {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(152, 185, 220, 0.1);
+}
+
+.session-usage-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--brand), var(--blue));
+}
+
+.session-delete-button {
+  align-self: start;
+  padding: 10px 12px;
+  border-radius: 14px;
+  white-space: nowrap;
+  background: rgba(255, 107, 107, 0.1);
+  border-color: rgba(255, 107, 107, 0.18);
+}
+
 .session-row.active {
   background: linear-gradient(135deg, rgba(255, 140, 66, 0.18), rgba(91, 166, 255, 0.14));
   border-color: rgba(255, 140, 66, 0.24);
@@ -727,12 +835,14 @@ button:disabled {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .transcript-main {
   display: flex;
   min-height: 0;
   overflow: hidden;
+  height: 100%;
 }
 
 .transcript-composer {
@@ -1038,21 +1148,24 @@ button:disabled {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(152, 185, 220, 0.2);
+  background: rgba(152, 185, 220, 0.28);
   border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(152, 185, 220, 0.34);
+  background: rgba(152, 185, 220, 0.42);
+  background-clip: padding-box;
 }
 
 .mobile-menu-button {
@@ -1076,6 +1189,14 @@ button:disabled {
   .content-grid.two-up,
   .content-grid.sidebar-layout {
     grid-template-columns: 1fr;
+  }
+
+  .session-row {
+    grid-template-columns: 1fr;
+  }
+
+  .session-delete-button {
+    width: 100%;
   }
 }
 
@@ -1135,8 +1256,29 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .transcript-card {
+    height: min(62vh, 620px);
+  }
+
   .auth-hero,
   .auth-panel {
     padding: 28px 20px;
+  }
+
+  .admin-users-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 18px 0;
+  }
+
+  .admin-user-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-role-select,
+  .admin-delete-button {
+    max-width: none;
+    width: 100%;
   }
 }

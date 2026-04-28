@@ -41,6 +41,16 @@ def _require_admin_user(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def _require_supervising_admin(current_user: User = Depends(get_current_user)) -> User:
+    role_name = current_user.role.name if current_user.role else None
+    if role_name != RoleName.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required.",
+        )
+    return current_user
+
+
 def _serialize_user(user: User) -> dict[str, Any]:
     return {
         "id": user.id,
@@ -107,6 +117,34 @@ def update_user_role(
         "status": "success",
         "message": "User role updated successfully.",
         "user": _serialize_user(user),
+    }
+
+
+@router.delete("/users/{user_id}", summary="Phase 12: Delete a non-admin user")
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_supervising_admin),
+) -> dict[str, Any]:
+    user = db.scalar(select(User).options(joinedload(User.role)).where(User.id == user_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail=f"User {user_id} was not found.")
+
+    user_role = user.role.name if user.role else None
+    if user_role == RoleName.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin users cannot be deleted.")
+
+    if user.id == current_user.id:
+        raise HTTPException(status_code=403, detail="You cannot delete your own account.")
+
+    serialized_user = _serialize_user(user)
+    db.delete(user)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": "User deleted successfully.",
+        "user": serialized_user,
     }
 
 

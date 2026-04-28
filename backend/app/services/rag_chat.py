@@ -25,6 +25,22 @@ KEYWORD_WEIGHT = 0.35
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
 
+def _extract_token_usage(response: Any) -> dict[str, int]:
+    usage = getattr(response, "usage_metadata", None) or {}
+    if not isinstance(usage, dict):
+        usage = {}
+
+    input_tokens = int(usage.get("input_tokens", 0) or 0)
+    output_tokens = int(usage.get("output_tokens", 0) or 0)
+    total_tokens = int(usage.get("total_tokens", input_tokens + output_tokens) or 0)
+
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
 @lru_cache(maxsize=1)
 def _get_prompt_environment() -> Environment:
     return Environment(
@@ -273,6 +289,7 @@ def answer_question_from_matches(
     )
     model_latency_ms = int((perf_counter() - model_start) * 1000)
     answer = response.content if isinstance(response.content, str) else str(response.content)
+    token_usage = _extract_token_usage(response)
 
     return {
         "answer": answer,
@@ -280,6 +297,7 @@ def answer_question_from_matches(
         "documents_used": _summarize_documents(usable_matches),
         "match_count": len(usable_matches),
         "model_latency_ms": model_latency_ms,
+        "token_usage": token_usage,
     }
 
 
