@@ -46,7 +46,7 @@ export default function VerifyOtpPage() {
           <p className="eyebrow">Confirm OTP</p>
           <h2>Verification code</h2>
           <p className="section-copy">
-            Enter the OTP for your email. In development mode, the generated OTP may be shown inline after signup.
+            Enter the OTP for your email. When SMTP is configured, the code is sent to your inbox.
           </p>
 
           <form className="auth-form" onSubmit={handleSubmit}>
@@ -75,6 +75,7 @@ export default function VerifyOtpPage() {
             {state.otpDelivery === "development_inline" && state.otp ? (
               <div className="info-banner">Development OTP: {state.otp}</div>
             ) : null}
+            {state.otpDelivery === "email" ? <div className="info-banner">{state.message || "OTP sent to your email."}</div> : null}
             {error ? <div className="error-banner">{error}</div> : null}
             {success ? <div className="success-banner">{success}</div> : null}
 
