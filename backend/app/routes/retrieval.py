@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.permissions import accessible_document_ids
 from app.auth.security import get_current_user, is_privileged_user
 from app.models.mysql import Document, DocumentChunk, User, get_db
 from app.retrieval.service import (
@@ -33,6 +34,7 @@ class RetrievalSearchRequest(BaseModel):
 def search_indexed_chunks(
     payload: RetrievalSearchRequest,
     response: Response,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     retrieval_start = perf_counter()
@@ -41,7 +43,7 @@ def search_indexed_chunks(
         matches = search_chunk_text(
             payload.query,
             limit=payload.limit,
-            owner_user_id=None if is_privileged_user(current_user) else current_user.id,
+            document_ids=accessible_document_ids(db, current_user, permission_field="can_query"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

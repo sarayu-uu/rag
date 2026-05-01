@@ -70,6 +70,7 @@ def search_chunk_text(
     *,
     limit: int,
     document_id: int | None = None,
+    document_ids: list[int] | None = None,
     owner_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     query_vector = embed_query(query)
@@ -77,6 +78,7 @@ def search_chunk_text(
         query_vector,
         limit=limit,
         document_id=document_id,
+        document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
 
@@ -117,6 +119,7 @@ def keyword_search_chunk_text(
     *,
     limit: int,
     document_id: int | None = None,
+    document_ids: list[int] | None = None,
     owner_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     tokens = _tokenize_query(query)
@@ -127,6 +130,10 @@ def keyword_search_chunk_text(
     statement = select(DocumentChunk).where(or_(*filters))
     if document_id is not None:
         statement = statement.where(DocumentChunk.document_id == int(document_id))
+    elif document_ids is not None:
+        if not document_ids:
+            return []
+        statement = statement.where(DocumentChunk.document_id.in_([int(item) for item in document_ids]))
     if owner_user_id is not None:
         statement = statement.where(DocumentChunk.owner_user_id == int(owner_user_id))
 

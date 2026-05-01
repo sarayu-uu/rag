@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import EmptyState from "../common/EmptyState";
 
 function formatRole(role) {
@@ -8,6 +9,16 @@ function formatRole(role) {
 }
 
 export default function ChatTranscript({ messages, pendingAnswer, loading, children }) {
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (!scrollRef.current) {
+      return;
+    }
+
+    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, pendingAnswer, loading]);
+
   return (
     <section className="feature-card transcript-card">
       <div className="feature-card-header">
@@ -23,10 +34,10 @@ export default function ChatTranscript({ messages, pendingAnswer, loading, child
         ) : messages.length === 0 && !pendingAnswer ? (
           <EmptyState
             title="Start asking"
-            message="Ask about the documents in your workspace and the response will appear here with citations."
+            message="Ask about the documents in your workspace and the answer will appear here. Supporting citations appear in Source Citations."
           />
         ) : (
-          <div className="transcript-scroll">
+          <div ref={scrollRef} className="transcript-scroll">
             {messages.map((message) => (
               <article
                 key={message.id || `${message.role}-${message.created_at}`}

@@ -192,6 +192,12 @@ export async function getChatMessages(sessionId) {
   });
 }
 
+export async function deleteChatSession(sessionId) {
+  return request(`/chat/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function queryChat({ question, limit = 5, sessionId = null }) {
   const payload = {
     question,
@@ -227,6 +233,12 @@ export async function updateUserRole(userId, role) {
   return request(`/admin/users/${userId}/role`, {
     method: "PATCH",
     body: JSON.stringify({ role }),
+  });
+}
+
+export async function deleteUser(userId) {
+  return request(`/admin/users/${userId}`, {
+    method: "DELETE",
   });
 }
 
