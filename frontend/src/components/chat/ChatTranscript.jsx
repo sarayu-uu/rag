@@ -34,7 +34,7 @@ export default function ChatTranscript({ messages, pendingAnswer, loading, child
         ) : messages.length === 0 && !pendingAnswer ? (
           <EmptyState
             title="Start asking"
-            message="Ask about the documents in your workspace and the response will appear here with citations."
+            message="Ask about the documents in your workspace and the answer will appear here. Supporting citations appear in Source Citations."
           />
         ) : (
           <div ref={scrollRef} className="transcript-scroll">

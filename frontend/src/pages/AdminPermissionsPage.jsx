@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
 import { getDocuments, updateDocumentPermissions } from "../lib/api";
+import { ROLE_KEYS } from "../lib/roles";
+
+const ROLE_OPTIONS = Object.values(ROLE_KEYS);
 
 const INITIAL_FORM = {
   user_id: "",
-  role_id: "",
+  role: ROLE_KEYS.VIEWER,
   can_read: true,
   can_query: true,
   can_edit: false,
@@ -48,12 +51,16 @@ export default function AdminPermissionsPage() {
     try {
       await updateDocumentPermissions(Number(selectedDocumentId), {
         user_id: form.user_id ? Number(form.user_id) : null,
-        role_id: form.role_id ? Number(form.role_id) : null,
+        role: form.user_id ? null : form.role,
         can_read: form.can_read,
         can_query: form.can_query,
         can_edit: form.can_edit,
       });
-      setSuccess("Permission rule updated successfully.");
+      setSuccess(
+        form.user_id
+          ? "User permission rule updated successfully."
+          : `${form.role} role permission rule updated successfully.`
+      );
     } catch (permissionError) {
       setError(permissionError.message || "Failed to update permissions.");
     } finally {
@@ -66,7 +73,7 @@ export default function AdminPermissionsPage() {
       <SectionHeader
         eyebrow="Governance"
         title="Document permissions"
-        description="Apply role or user specific read, query, and edit controls using the backend permission endpoint."
+        description="Grant a selected file to a role or a specific user for reading and chat retrieval."
       />
 
       {error ? <div className="error-banner">{error}</div> : null}
@@ -109,18 +116,23 @@ export default function AdminPermissionsPage() {
                 type="number"
                 value={form.user_id}
                 onChange={(event) => setForm((value) => ({ ...value, user_id: event.target.value }))}
-                placeholder="Optional"
+                placeholder="Optional. Leave blank to grant by role."
               />
             </label>
 
             <label>
-              <span>Role ID</span>
-              <input
-                type="number"
-                value={form.role_id}
-                onChange={(event) => setForm((value) => ({ ...value, role_id: event.target.value }))}
-                placeholder="Optional"
-              />
+              <span>Role</span>
+              <select
+                value={form.role}
+                onChange={(event) => setForm((value) => ({ ...value, role: event.target.value }))}
+                disabled={Boolean(form.user_id)}
+              >
+                {ROLE_OPTIONS.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label className="toggle-row">

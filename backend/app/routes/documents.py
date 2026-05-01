@@ -11,8 +11,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from app.auth.permissions import document_access_filter
 from app.auth.security import get_current_user, is_privileged_user
 from app.models.mysql import Document, DocumentChunk, User, get_db
 from app.retrieval.service import clear_document_vectors
@@ -22,6 +23,14 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 def _serialize_document(document: Document, chunk_count: int) -> dict[str, Any]:
+    uploader_payload: dict[str, Any] | None = None
+    if getattr(document, "uploader", None) is not None:
+        uploader_payload = {
+            "id": document.uploader.id,
+            "name": document.uploader.username,
+            "position": document.uploader.role.name.value if document.uploader.role else None,
+        }
+
     return {
         "id": document.id,
         "title": document.title,
@@ -32,6 +41,7 @@ def _serialize_document(document: Document, chunk_count: int) -> dict[str, Any]:
         "status": document.status.value,
         "uploaded_at": document.uploaded_at.isoformat(),
         "chunk_count": chunk_count,
+        "uploader": uploader_payload,
     }
 
 
@@ -40,6 +50,7 @@ def _get_document_with_chunk_count(
     document_id: int,
     *,
     current_user: User,
+    permission_field: str = "can_read",
 ) -> tuple[Document, int] | None:
     statement = (
         select(Document, func.count(DocumentChunk.id))
@@ -47,8 +58,9 @@ def _get_document_with_chunk_count(
         .where(Document.id == document_id)
         .group_by(Document.id)
     )
-    if not is_privileged_user(current_user):
-        statement = statement.where(Document.upload_user_id == current_user.id)
+    access_filter = document_access_filter(current_user, permission_field=permission_field)
+    if access_filter is not None:
+        statement = statement.where(access_filter)
 
     row = db.execute(statement).first()
     if row is None:
@@ -85,16 +97,24 @@ def list_documents(
 ) -> dict[str, Any]:
     statement = (
         select(Document, func.count(DocumentChunk.id))
+        .options(joinedload(Document.uploader).joinedload(User.role))
         .outerjoin(DocumentChunk, DocumentChunk.document_id == Document.id)
         .group_by(Document.id)
         .order_by(Document.uploaded_at.desc(), Document.id.desc())
     )
-    if not is_privileged_user(current_user):
-        statement = statement.where(Document.upload_user_id == current_user.id)
+    access_filter = document_access_filter(current_user, permission_field="can_read")
+    if access_filter is not None:
+        statement = statement.where(access_filter)
 
     rows = db.execute(statement).all()
 
-    documents = [_serialize_document(document, int(chunk_count or 0)) for document, chunk_count in rows]
+    include_uploader = is_privileged_user(current_user)
+    documents = []
+    for document, chunk_count in rows:
+        payload = _serialize_document(document, int(chunk_count or 0))
+        if not include_uploader:
+            payload["uploader"] = None
+        documents.append(payload)
     return {
         "status": "success",
         "count": len(documents),
@@ -125,9 +145,14 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    payload = _get_document_with_chunk_count(db, document_id, current_user=current_user)
+    payload = _get_document_with_chunk_count(
+        db,
+        document_id,
+        current_user=current_user,
+        permission_field="can_edit",
+    )
     if payload is None:
-        raise HTTPException(status_code=404, detail=f"Document {document_id} was not found.")
+        raise HTTPException(status_code=404, detail=f"Document {document_id} was not found or u dont havr the access to delete it.")
 
     document, chunk_count = payload
     try:

@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
+import re
 from time import perf_counter
 from typing import Any
 
@@ -55,6 +56,20 @@ def _get_prompt_environment() -> Environment:
 def _render_prompt(template_name: str, **context: Any) -> str:
     template = _get_prompt_environment().get_template(template_name)
     return template.render(**context).strip()
+
+
+def _strip_inline_sources(answer: str) -> str:
+    cleaned = (answer or "").strip()
+    if not cleaned:
+        return ""
+
+    # Remove trailing "Sources:" / "Citations:" sections from model text output.
+    cleaned = re.sub(
+        r"(?is)\n\s*(sources?|citations?)\s*:\s*[\s\S]*$",
+        "",
+        cleaned,
+    ).strip()
+    return cleaned
 
 
 def _normalize_memory_context(memory_context: dict[str, Any] | None) -> dict[str, Any]:
@@ -289,6 +304,7 @@ def answer_question_from_matches(
     )
     model_latency_ms = int((perf_counter() - model_start) * 1000)
     answer = response.content if isinstance(response.content, str) else str(response.content)
+    answer = _strip_inline_sources(answer)
     token_usage = _extract_token_usage(response)
 
     return {
@@ -306,6 +322,7 @@ def answer_question_with_retrieval(
     *,
     limit: int,
     memory_context: dict[str, Any] | None = None,
+    document_ids: list[int] | None = None,
     owner_user_id: int | None = None,
 ) -> dict[str, Any]:
     retrieval_start = perf_counter()
@@ -313,11 +330,13 @@ def answer_question_with_retrieval(
     semantic_matches = search_chunk_text(
         question,
         limit=candidate_limit,
+        document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
     keyword_matches = keyword_search_chunk_text(
         question,
         limit=candidate_limit,
+        document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
     reranked_matches = _rerank_hybrid_matches(semantic_matches, keyword_matches)

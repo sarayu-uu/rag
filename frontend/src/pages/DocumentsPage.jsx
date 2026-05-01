@@ -4,10 +4,11 @@ import SectionHeader from "../components/common/SectionHeader";
 import UploadCard from "../components/documents/UploadCard";
 import { useAuth } from "../context/AuthContext";
 import { deleteDocument, getDocuments, uploadDocument } from "../lib/api";
-import { canUpload } from "../lib/roles";
+import { canUpload, isManagementRole } from "../lib/roles";
 
 export default function DocumentsPage() {
   const { user } = useAuth();
+  const showUploaderColumn = isManagementRole(user?.role);
   const [documents, setDocuments] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -85,22 +86,28 @@ export default function DocumentsPage() {
             />
           ) : (
             <div className="table-shell">
-              <div className="table-row table-head">
+              <div className={`table-row table-head documents-row ${showUploaderColumn ? "with-uploader" : ""}`}>
                 <span>Name</span>
                 <span>Type</span>
+                {showUploaderColumn ? <span>Uploaded by</span> : null}
                 <span>Status</span>
                 <span>Uploaded</span>
                 <span>Action</span>
               </div>
               {documents.map((document) => (
-                <div key={document.id} className="table-row">
+                <div key={document.id} className={`table-row documents-row ${showUploaderColumn ? "with-uploader" : ""}`}>
                   <span>{document.title}</span>
                   <span>{document.file_type}</span>
+                  {showUploaderColumn ? (
+                    <span>
+                      {document.uploader?.name || "Unknown"} ({document.uploader?.position || "Unknown"})
+                    </span>
+                  ) : null}
                   <span>{document.status}</span>
                   <span>{new Date(document.uploaded_at).toLocaleDateString()}</span>
-                  <span>
+                  <span className="documents-action-cell">
                     <button
-                      className="ghost-button danger-button"
+                      className="ghost-button danger-button documents-delete-button"
                       onClick={() => handleDelete(document.id)}
                       disabled={busy}
                     >
