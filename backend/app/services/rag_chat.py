@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
+import re
 from time import perf_counter
 from typing import Any
 
@@ -25,6 +26,22 @@ KEYWORD_WEIGHT = 0.35
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 
 
+def _extract_token_usage(response: Any) -> dict[str, int]:
+    usage = getattr(response, "usage_metadata", None) or {}
+    if not isinstance(usage, dict):
+        usage = {}
+
+    input_tokens = int(usage.get("input_tokens", 0) or 0)
+    output_tokens = int(usage.get("output_tokens", 0) or 0)
+    total_tokens = int(usage.get("total_tokens", input_tokens + output_tokens) or 0)
+
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
 @lru_cache(maxsize=1)
 def _get_prompt_environment() -> Environment:
     return Environment(
@@ -39,6 +56,20 @@ def _get_prompt_environment() -> Environment:
 def _render_prompt(template_name: str, **context: Any) -> str:
     template = _get_prompt_environment().get_template(template_name)
     return template.render(**context).strip()
+
+
+def _strip_inline_sources(answer: str) -> str:
+    cleaned = (answer or "").strip()
+    if not cleaned:
+        return ""
+
+    # Remove trailing "Sources:" / "Citations:" sections from model text output.
+    cleaned = re.sub(
+        r"(?is)\n\s*(sources?|citations?)\s*:\s*[\s\S]*$",
+        "",
+        cleaned,
+    ).strip()
+    return cleaned
 
 
 def _normalize_memory_context(memory_context: dict[str, Any] | None) -> dict[str, Any]:
@@ -273,6 +304,8 @@ def answer_question_from_matches(
     )
     model_latency_ms = int((perf_counter() - model_start) * 1000)
     answer = response.content if isinstance(response.content, str) else str(response.content)
+    answer = _strip_inline_sources(answer)
+    token_usage = _extract_token_usage(response)
 
     return {
         "answer": answer,
@@ -280,6 +313,7 @@ def answer_question_from_matches(
         "documents_used": _summarize_documents(usable_matches),
         "match_count": len(usable_matches),
         "model_latency_ms": model_latency_ms,
+        "token_usage": token_usage,
     }
 
 
@@ -288,6 +322,7 @@ def answer_question_with_retrieval(
     *,
     limit: int,
     memory_context: dict[str, Any] | None = None,
+    document_ids: list[int] | None = None,
     owner_user_id: int | None = None,
 ) -> dict[str, Any]:
     retrieval_start = perf_counter()
@@ -295,11 +330,13 @@ def answer_question_with_retrieval(
     semantic_matches = search_chunk_text(
         question,
         limit=candidate_limit,
+        document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
     keyword_matches = keyword_search_chunk_text(
         question,
         limit=candidate_limit,
+        document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
     reranked_matches = _rerank_hybrid_matches(semantic_matches, keyword_matches)

@@ -3,7 +3,99 @@ import SectionHeader from "../components/common/SectionHeader";
 import StatCard from "../components/common/StatCard";
 import { useAuth } from "../context/AuthContext";
 import { getDocuments, getHealth, getMetrics } from "../lib/api";
-import { getRoleDefinition } from "../lib/roles";
+import { getRoleDefinition, isManagementRole, ROLE_KEYS } from "../lib/roles";
+
+function scopeCopy(metrics, userRole) {
+  if (metrics?.scope === "global" || isManagementRole(userRole)) {
+    return "all users";
+  }
+  return "your account";
+}
+
+function countForType(metrics, requestType) {
+  return metrics?.by_request_type?.[requestType]?.request_count ?? 0;
+}
+
+function buildMetricCards({ documents, health, metricTotals, metrics, userRole }) {
+  const scope = scopeCopy(metrics, userRole);
+  const documentHint = isManagementRole(userRole)
+    ? "Documents returned by the documents API for your management role. This can include workspace documents you are allowed to inspect."
+    : "Documents returned by the documents API for your role and permissions. Hidden documents are not counted.";
+  const baseCards = [
+    {
+      label: "API health",
+      value: health?.status || "Loading",
+      detail: `Database: ${health?.database || "checking"} | Vector store: ${health?.vector_store || "checking"}`,
+      tone: "signal",
+      hint: "Live health response from the backend. It checks the API status, database connection, and vector store availability.",
+    },
+    {
+      label: "Visible documents",
+      value: documents.length,
+      detail: `Documents visible to ${scope}.`,
+      tone: "document",
+      hint: documentHint,
+    },
+  ];
+
+  if (isManagementRole(userRole)) {
+    return [
+      ...baseCards,
+      {
+        label: "Workspace requests",
+        value: metricTotals.request_count ?? 0,
+        detail: `Tracked across ${scope}.`,
+        tone: "chat",
+        hint: "Total logged chat, retrieval, ingestion, and document requests. Admin and Manager roles see the global workspace scope.",
+      },
+      {
+        label: "Estimated cost",
+        value: `$${Number(metricTotals.estimated_cost ?? 0).toFixed(6)}`,
+        detail: `Tokens: ${metricTotals.token_total ?? 0} | Errors: ${metricTotals.error_count ?? 0}`,
+        tone: "admin",
+        hint: "Estimated cost from logged input and output tokens. It uses the backend telemetry cost formula, so it is an operational estimate.",
+      },
+    ];
+  }
+
+  if (userRole === ROLE_KEYS.ANALYST) {
+    return [
+      ...baseCards,
+      {
+        label: "My ingestion requests",
+        value: countForType(metrics, "ingestion"),
+        detail: `Total requests: ${metricTotals.request_count ?? 0}`,
+        tone: "chat",
+        hint: "Ingestion and document-processing requests logged for your account. Analysts usually see this because they can upload knowledge sources.",
+      },
+      {
+        label: "My tokens",
+        value: metricTotals.token_total ?? 0,
+        detail: `Input: ${metricTotals.token_input ?? 0} | Output: ${metricTotals.token_output ?? 0}`,
+        tone: "admin",
+        hint: "Total input and output tokens logged for your account across chat and retrieval-backed answers.",
+      },
+    ];
+  }
+
+  return [
+    ...baseCards,
+    {
+      label: "My chat requests",
+      value: countForType(metrics, "chat"),
+      detail: `Total requests: ${metricTotals.request_count ?? 0}`,
+      tone: "chat",
+      hint: "Chat requests logged for your own account. Viewer and Guest roles only see their personal metrics.",
+    },
+    {
+      label: "Avg latency",
+      value: `${metricTotals.avg_latency_ms ?? 0} ms`,
+      detail: `Errors: ${metricTotals.error_count ?? 0} | Scope: ${scope}`,
+      tone: "admin",
+      hint: "Average backend request time for your logged activity. Lower values mean responses are returning faster.",
+    },
+  ];
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -33,6 +125,13 @@ export default function DashboardPage() {
   }, []);
 
   const metricTotals = metrics?.totals || {};
+  const metricCards = buildMetricCards({
+    documents,
+    health,
+    metricTotals,
+    metrics,
+    userRole: user?.role,
+  });
 
   return (
     <div className="page-stack">
@@ -45,30 +144,9 @@ export default function DashboardPage() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       <section className="stats-grid">
-        <StatCard
-          label="API health"
-          value={health?.status || "Loading"}
-          detail={`Database: ${health?.database || "checking"} | Vector store: ${health?.vector_store || "checking"}`}
-          tone="signal"
-        />
-        <StatCard
-          label="Visible documents"
-          value={documents.length}
-          detail="Documents currently accessible in your workspace."
-          tone="document"
-        />
-        <StatCard
-          label="Tracked requests"
-          value={metricTotals.request_count ?? 0}
-          detail={`Metrics scope: ${metrics?.scope || "current_user"}`}
-          tone="chat"
-        />
-        <StatCard
-          label="Avg latency"
-          value={`${metricTotals.avg_latency_ms ?? 0} ms`}
-          detail="Observed average latency from the current metrics endpoint."
-          tone="admin"
-        />
+        {metricCards.map((card) => (
+          <StatCard key={card.label} {...card} />
+        ))}
       </section>
 
       <section className="content-grid two-up">

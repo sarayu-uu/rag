@@ -93,6 +93,7 @@ class Role(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     users: Mapped[list["User"]] = relationship(back_populates="role")
+    permissions: Mapped[list["Permission"]] = relationship(back_populates="role")
 
 
 class User(Base):
@@ -266,6 +267,7 @@ class Permission(Base):
     )
     granted_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     document: Mapped["Document"] = relationship(back_populates="permissions")
+    role: Mapped["Role | None"] = relationship(back_populates="permissions")
     user: Mapped["User"] = relationship(
         back_populates="permissions",
         foreign_keys=[user_id],

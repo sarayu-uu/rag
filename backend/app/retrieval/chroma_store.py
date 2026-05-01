@@ -92,13 +92,18 @@ def search_vectors(
     *,
     limit: int | None = None,
     document_id: int | None = None,
+    document_ids: list[int] | None = None,
     owner_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
     collection = get_collection()
 
-    filters: list[dict[str, int]] = []
+    filters: list[dict[str, Any]] = []
     if document_id is not None:
         filters.append({"document_id": int(document_id)})
+    elif document_ids is not None:
+        if not document_ids:
+            return []
+        filters.append({"document_id": {"$in": [int(item) for item in document_ids]}})
     if owner_user_id is not None:
         filters.append({"owner_user_id": int(owner_user_id)})
 
