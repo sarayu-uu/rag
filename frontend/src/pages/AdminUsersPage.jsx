@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
-import { getUsers, updateUserRole } from "../lib/api";
+import { deleteUser, getUsers, updateUserRole } from "../lib/api";
 import { ROLE_KEYS } from "../lib/roles";
+import { useAuth } from "../context/AuthContext";
 
 const ROLE_OPTIONS = Object.values(ROLE_KEYS);
 
 export default function AdminUsersPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [busyUserId, setBusyUserId] = useState(null);
   const [error, setError] = useState("");
@@ -39,6 +41,28 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleDeleteUser(user) {
+    const confirmed = window.confirm(`Delete user ${user.username}? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyUserId(user.id);
+    setError("");
+    setSuccess("");
+    try {
+      await deleteUser(user.id);
+      setSuccess("User deleted successfully.");
+      await loadUsers();
+    } catch (deleteError) {
+      setError(deleteError.message || "Delete user failed.");
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
+  const canDeleteUsers = currentUser?.role === ROLE_KEYS.ADMIN;
+
   return (
     <div className="page-stack">
       <SectionHeader
@@ -52,22 +76,32 @@ export default function AdminUsersPage() {
 
       <section className="feature-card table-card">
         <div className="table-shell">
-          <div className="table-row table-head">
+          <div className="table-row table-head admin-users-row">
             <span>User</span>
             <span>Email</span>
             <span>Role</span>
             <span>Status</span>
-            <span>Update</span>
+            <span>Controls</span>
           </div>
           {users.map((user) => (
-            <div key={user.id} className="table-row">
-              <span>{user.username}</span>
+            <div key={user.id} className="table-row admin-users-row">
+              <div className="admin-user-cell">
+                <strong>{user.username}</strong>
+              </div>
               <span>{user.email}</span>
-              <span>{user.role}</span>
-              <span>{user.is_active ? "Active" : "Pending"}</span>
               <span>
+                <span className="role-chip admin-role-chip">{user.role}</span>
+              </span>
+              <span>
+                <span className={`status-chip admin-status-chip ${user.is_active ? "is-active" : "is-pending"}`}>
+                  <span className={`status-dot admin-status-dot ${user.is_active ? "is-active" : "is-pending"}`} />
+                  {user.is_active ? "Active" : "Pending"}
+                </span>
+              </span>
+              <div className="admin-user-actions">
                 <select
                   defaultValue={user.role}
+                  className="admin-role-select"
                   onChange={(event) => handleRoleChange(user.id, event.target.value)}
                   disabled={busyUserId === user.id}
                 >
@@ -77,7 +111,19 @@ export default function AdminUsersPage() {
                     </option>
                   ))}
                 </select>
-              </span>
+                {canDeleteUsers && user.role !== ROLE_KEYS.ADMIN ? (
+                  <button
+                    type="button"
+                    className="ghost-button danger-button admin-delete-button"
+                    onClick={() => handleDeleteUser(user)}
+                    disabled={busyUserId === user.id}
+                  >
+                    {busyUserId === user.id ? "Deleting..." : "Delete"}
+                  </button>
+                ) : (
+                  <span className="admin-user-meta">{user.role === ROLE_KEYS.ADMIN ? "Protected" : "Unavailable"}</span>
+                )}
+              </div>
             </div>
           ))}
         </div>

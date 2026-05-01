@@ -4,6 +4,18 @@ import StatCard from "../components/common/StatCard";
 import { evaluateQualityReport, getHealth, getTelemetry } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
+function MetricHelp({ label, hint }) {
+  return (
+    <span className="metric-inline-label">
+      <strong>{label}</strong>
+      <span className="metric-help metric-help-inline" tabIndex={0} aria-label={`${label} info`}>
+        i
+        <span className="metric-tooltip">{hint}</span>
+      </span>
+    </span>
+  );
+}
+
 export default function TelemetryPage() {
   const { user } = useAuth();
   const [hours, setHours] = useState(24);
@@ -67,6 +79,10 @@ export default function TelemetryPage() {
   const usage = telemetry?.usage_tracking || {};
   const modelPerformance = telemetry?.model_performance || {};
   const system = telemetry?.system_health_monitoring || {};
+  const byRequestType = usage.by_request_type || [];
+  const chatUsageRow = byRequestType.find((row) => String(row.request_type).toLowerCase() === "chat") || null;
+  const windowHoursLabel = telemetry?.window_hours ?? hours;
+  const scopeLabel = telemetry?.scope === "global" ? "all visible users" : "your account";
 
   return (
     <div className="page-stack">
@@ -101,26 +117,34 @@ export default function TelemetryPage() {
           value={logging.request_count ?? 0}
           detail={`Errors: ${logging.error_count ?? 0} | Error rate: ${logging.error_rate ?? 0}`}
           tone="signal"
+          hint="Count of logged API requests in the selected time window and scope."
         />
         <StatCard
           label="Latency"
           value={`${logging.avg_latency_ms ?? 0} ms`}
           detail={`Max latency: ${logging.max_latency_ms ?? 0} ms`}
           tone="chat"
+          hint="Average backend request time for the selected time window. Max latency shows the slowest request seen."
         />
         <StatCard
-          label="Token usage"
+          label="Window tokens"
           value={usage.token_total ?? 0}
-          detail={`Input: ${usage.token_input ?? 0} | Output: ${usage.token_output ?? 0}`}
+          detail={`Chat: ${chatUsageRow?.token_total ?? 0} | Scope: ${scopeLabel}`}
           tone="document"
+          hint="Aggregated token usage from telemetry logs across the selected time window. This is not the same as the token total for one chat session."
         />
         <StatCard
           label="Estimated cost"
           value={`$${Number(usage.estimated_cost ?? 0).toFixed(6)}`}
-          detail={`Window: ${telemetry?.window_hours ?? hours}h | Scope: ${telemetry?.scope ?? "n/a"}`}
+          detail={`Window: ${windowHoursLabel}h | Scope: ${scopeLabel}`}
           tone="admin"
+          hint="Estimated usage cost computed from logged input and output tokens in the selected time window."
         />
       </section>
+
+      <div className="info-banner">
+        Chat page totals are per session. Telemetry totals are aggregated across the selected time window and scope.
+      </div>
 
       <section className="content-grid two-up">
         <article className="feature-card">
@@ -132,15 +156,24 @@ export default function TelemetryPage() {
           </div>
           <div className="data-list">
             <div className="data-row">
-              <strong>Ingestion</strong>
+              <MetricHelp
+                label="Ingestion"
+                hint="Average time spent processing document ingestion requests in the selected telemetry window."
+              />
               <span>{modelPerformance.avg_ingestion_time_ms ?? 0} ms</span>
             </div>
             <div className="data-row">
-              <strong>Retrieval</strong>
+              <MetricHelp
+                label="Retrieval"
+                hint="Average time spent finding relevant document chunks for retrieval requests in the selected telemetry window."
+              />
               <span>{modelPerformance.avg_retrieval_latency_ms ?? 0} ms</span>
             </div>
             <div className="data-row">
-              <strong>Model response</strong>
+              <MetricHelp
+                label="Model response"
+                hint="Average time attributed to model generation for logged chat responses in the selected telemetry window."
+              />
               <span>{modelPerformance.avg_model_latency_ms ?? 0} ms</span>
             </div>
           </div>
@@ -155,15 +188,24 @@ export default function TelemetryPage() {
           </div>
           <div className="data-list">
             <div className="data-row">
-              <strong>API</strong>
+              <MetricHelp
+                label="API"
+                hint="Current backend API health status. This is live system health, not a historical request metric."
+              />
               <span>{system.api_status || health?.status || "unknown"}</span>
             </div>
             <div className="data-row">
-              <strong>Database</strong>
+              <MetricHelp
+                label="Database"
+                hint="Current database connectivity check used by the backend health monitor."
+              />
               <span>{system.database || health?.database || "unknown"}</span>
             </div>
             <div className="data-row">
-              <strong>Vector store</strong>
+              <MetricHelp
+                label="Vector store"
+                hint="Current vector database status for retrieval. If it is unavailable, document search quality can be affected."
+              />
               <span>{system.vector_store || health?.vector_store || "unknown"}</span>
             </div>
             {system.database_detail ? (
@@ -184,9 +226,12 @@ export default function TelemetryPage() {
           <div className="data-list">
             {(usage.by_request_type || []).map((row) => (
               <div key={row.request_type} className="data-row">
-                <strong>{row.request_type}</strong>
+                <MetricHelp
+                  label={row.request_type}
+                  hint="Request class from telemetry logs. Counts, errors, tokens, and average latency are aggregated for this class in the selected window."
+                />
                 <span>
-                  req: {row.request_count} | err: {row.error_count} | tok: {row.token_total}
+                  req: {row.request_count} | err: {row.error_count} | tok: {row.token_total} | avg: {row.avg_latency_ms} ms
                 </span>
               </div>
             ))}
@@ -204,7 +249,10 @@ export default function TelemetryPage() {
           <div className="data-list">
             {(usage.per_user_usage || []).map((row) => (
               <div key={`u-${row.user_id ?? "none"}`} className="data-row">
-                <strong>User {row.user_id ?? "N/A"}</strong>
+                <MetricHelp
+                  label={`User ${row.user_id ?? "N/A"}`}
+                  hint="Per-user usage row for the selected telemetry window. Admin and Manager roles can see users in the global scope."
+                />
                 <span>
                   req: {row.request_count} | tok: {row.token_total} | ${Number(row.estimated_cost ?? 0).toFixed(6)}
                 </span>
@@ -255,19 +303,38 @@ export default function TelemetryPage() {
               <h3>Retrieval Metrics</h3>
               <ul className="quality-list">
                 <li>
-                  <strong>Top rerank score:</strong> {Number(evalResult.retrieval_summary?.top_rerank_score ?? 0).toFixed(4)}.
+                  <MetricHelp
+                    label="Top rerank score:"
+                    hint={evalResult.metric_guide?.rerank_score || "Highest hybrid relevance score among selected chunks. Higher usually means the best retrieved chunk is more relevant."}
+                  />{" "}
+                  {Number(evalResult.retrieval_summary?.top_rerank_score ?? 0).toFixed(4)}.
                 </li>
                 <li>
-                  <strong>Average rerank score:</strong> {Number(evalResult.retrieval_summary?.avg_rerank_score ?? 0).toFixed(4)}.
+                  <MetricHelp
+                    label="Average rerank score:"
+                    hint={evalResult.metric_guide?.avg_rerank_score || "Mean hybrid relevance score across selected chunks. Higher means the retrieved context is stronger overall."}
+                  />{" "}
+                  {Number(evalResult.retrieval_summary?.avg_rerank_score ?? 0).toFixed(4)}.
                 </li>
                 <li>
-                  <strong>Best semantic distance:</strong> {Number(evalResult.retrieval_summary?.best_semantic_distance ?? 0).toFixed(4)}.
+                  <MetricHelp
+                    label="Best semantic distance:"
+                    hint={evalResult.metric_guide?.semantic_distance || "Best vector distance among retrieved chunks. Lower distance means stronger semantic similarity."}
+                  />{" "}
+                  {Number(evalResult.retrieval_summary?.best_semantic_distance ?? 0).toFixed(4)}.
                 </li>
                 <li>
-                  <strong>Retrieval latency:</strong> {evalResult.retrieval_summary?.retrieval_latency_ms ?? 0} ms.
+                  <MetricHelp
+                    label="Retrieval latency:"
+                    hint="Time spent running retrieval for this evaluation request."
+                  />{" "}
+                  {evalResult.retrieval_summary?.retrieval_latency_ms ?? 0} ms.
                 </li>
                 <li>
-                  <strong>Semantic/Keyword/Hybrid candidates:</strong>{" "}
+                  <MetricHelp
+                    label="Semantic/Keyword/Hybrid candidates:"
+                    hint="Candidate counts found by vector search, keyword search, and the combined hybrid set before final ranking."
+                  />{" "}
                   {evalResult.retrieval_summary?.retrieval_debug?.semantic_match_count ?? 0}/
                   {evalResult.retrieval_summary?.retrieval_debug?.keyword_match_count ?? 0}/
                   {evalResult.retrieval_summary?.retrieval_debug?.hybrid_match_count ?? 0}.
@@ -280,16 +347,32 @@ export default function TelemetryPage() {
               ) : (
                 <ul className="quality-list">
                   <li>
-                    <strong>Faithfulness:</strong> {Number(evalResult.ragas?.metrics?.faithfulness ?? 0).toFixed(4)}.
+                    <MetricHelp
+                      label="Faithfulness:"
+                      hint={evalResult.metric_guide?.faithfulness || "Measures whether the answer is supported by the retrieved context. Higher is better."}
+                    />{" "}
+                    {Number(evalResult.ragas?.metrics?.faithfulness ?? 0).toFixed(4)}.
                   </li>
                   <li>
-                    <strong>Answer relevancy:</strong> {Number(evalResult.ragas?.metrics?.answer_relevancy ?? 0).toFixed(4)}.
+                    <MetricHelp
+                      label="Answer relevancy:"
+                      hint={evalResult.metric_guide?.answer_relevancy || "Measures how directly the answer addresses the question. Higher is better."}
+                    />{" "}
+                    {Number(evalResult.ragas?.metrics?.answer_relevancy ?? 0).toFixed(4)}.
                   </li>
                   <li>
-                    <strong>Context precision:</strong> {Number(evalResult.ragas?.metrics?.context_precision ?? 0).toFixed(4)}.
+                    <MetricHelp
+                      label="Context precision:"
+                      hint={evalResult.metric_guide?.context_precision || "Measures whether the highest-ranked retrieved context is useful. Higher is better."}
+                    />{" "}
+                    {Number(evalResult.ragas?.metrics?.context_precision ?? 0).toFixed(4)}.
                   </li>
                   <li>
-                    <strong>Context recall:</strong> {Number(evalResult.ragas?.metrics?.context_recall ?? 0).toFixed(4)}.
+                    <MetricHelp
+                      label="Context recall:"
+                      hint={evalResult.metric_guide?.context_recall || "Measures whether the retrieved context covers the reference answer. Higher is better."}
+                    />{" "}
+                    {Number(evalResult.ragas?.metrics?.context_recall ?? 0).toFixed(4)}.
                   </li>
                 </ul>
               )}
