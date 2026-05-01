@@ -27,7 +27,7 @@ def _to_float(value: Decimal | int | None) -> float:
     return float(value)
 
 
-@router.get("/metrics", summary="Phase 12: Aggregate metrics and telemetry counters")
+@router.get("/metrics", summary="Aggregate metrics and telemetry counters")
 def get_metrics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -85,7 +85,7 @@ def get_metrics(
     }
 
 
-@router.get("/telemetry", summary="Phase 10: Telemetry and observability summary from metrics_usage")
+@router.get("/telemetry", summary="Telemetry and observability summary from metrics_usage")
 def get_telemetry(
     hours: int = Query(default=24, ge=1, le=24 * 30),
     db: Session = Depends(get_db),

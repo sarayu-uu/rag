@@ -79,7 +79,7 @@ def _serialize_permission(permission: Permission) -> dict[str, Any]:
     }
 
 
-@router.get("/users", summary="Phase 12: List users for admin workflows")
+@router.get("/users", summary="List users for admin workflows")
 def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(_require_admin_user),
@@ -96,7 +96,7 @@ def list_users(
     }
 
 
-@router.patch("/users/{user_id}/role", summary="Phase 12: Update a user's RBAC role")
+@router.patch("/users/{user_id}/role", summary="Update a user's RBAC role")
 def update_user_role(
     user_id: int,
     payload: UpdateUserRoleRequest,
@@ -150,7 +150,7 @@ def delete_user(
     }
 
 
-@router.patch("/documents/{document_id}/permissions", summary="Phase 12: Update one document permission rule")
+@router.patch("/documents/{document_id}/permissions", summary="Update one document permission rule")
 def update_document_permissions(
     document_id: int,
     payload: UpdateDocumentPermissionRequest,

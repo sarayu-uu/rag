@@ -81,7 +81,7 @@ def generate_answer_from_matches(
     }
 
 
-@router.post("/query", summary="Phase 6: Search across all indexed documents and generate a grounded answer")
+@router.post("/query", summary="Search indexed documents and generate grounded answer")
 def chat_query(
     payload: ChatQueryRequest,
     response: Response,
@@ -172,7 +172,7 @@ def chat_query(
     }
 
 
-@router.get("/sessions", summary="Phase 9: List persistent chat sessions")
+@router.get("/sessions", summary="List persistent chat sessions")
 def get_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -184,7 +184,7 @@ def get_sessions(
     }
 
 
-@router.get("/sessions/{session_id}/messages", summary="Phase 9: Get all messages for a session")
+@router.get("/sessions/{session_id}/messages", summary="Get all messages for a session")
 def get_session_messages(
     session_id: int,
     db: Session = Depends(get_db),
