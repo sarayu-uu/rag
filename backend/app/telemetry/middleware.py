@@ -20,6 +20,11 @@ from app.telemetry.service import (
 logger = logging.getLogger("app.telemetry")
 
 
+# Detailed function explanation:
+# - Purpose: `_resolve_user_id_from_auth_header` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _resolve_user_id_from_auth_header(request: Request) -> int | None:
     raw_auth = request.headers.get("authorization", "").strip()
     if not raw_auth.lower().startswith("bearer "):
@@ -43,6 +48,11 @@ def _resolve_user_id_from_auth_header(request: Request) -> int | None:
         return None
 
 
+# Detailed function explanation:
+# - Purpose: `telemetry_middleware` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 async def telemetry_middleware(request: Request, call_next):
     started = now_perf()
     path = request.url.path

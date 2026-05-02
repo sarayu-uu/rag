@@ -1,3 +1,8 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
 import { deleteUser, getUsers, updateUserRole } from "../lib/api";
@@ -6,6 +11,13 @@ import { useAuth } from "../context/AuthContext";
 
 const ROLE_OPTIONS = Object.values(ROLE_KEYS);
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `AdminUsersPage` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
@@ -13,6 +25,13 @@ export default function AdminUsersPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `loadUsers` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function loadUsers() {
     try {
       const response = await getUsers();
@@ -26,6 +45,13 @@ export default function AdminUsersPage() {
     loadUsers();
   }, []);
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleRoleChange` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleRoleChange(userId, role) {
     setBusyUserId(userId);
     setError("");
@@ -41,6 +67,13 @@ export default function AdminUsersPage() {
     }
   }
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleDeleteUser` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleDeleteUser(user) {
     const confirmed = window.confirm(`Delete user ${user.username}? This cannot be undone.`);
     if (!confirmed) {

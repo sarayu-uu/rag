@@ -1,9 +1,21 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import EmptyState from "../common/EmptyState";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { evaluateQualityReport } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `SourcePanel` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function SourcePanel({ answerPayload }) {
   const { user } = useAuth();
   const [hoveredCitation, setHoveredCitation] = useState(null);
@@ -27,6 +39,13 @@ export default function SourcePanel({ answerPayload }) {
     citationPreviewByKey.set(key, preview);
   });
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `computePopoverPosition` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   function computePopoverPosition(rect) {
     const popupWidth = Math.min(460, Math.floor(window.innerWidth * 0.72));
     const popupHeight = 220;
@@ -45,6 +64,13 @@ export default function SourcePanel({ answerPayload }) {
     return { top, left };
   }
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `showCitationPopover` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   function showCitationPopover(event, preview) {
     const rect = event.currentTarget.getBoundingClientRect();
     const position = computePopoverPosition(rect);
@@ -55,6 +81,13 @@ export default function SourcePanel({ answerPayload }) {
     });
   }
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `moveCitationPopover` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   function moveCitationPopover(event) {
     if (!hoveredCitation) {
       return;
@@ -72,6 +105,13 @@ export default function SourcePanel({ answerPayload }) {
     );
   }
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `hideCitationPopover` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   function hideCitationPopover() {
     setHoveredCitation(null);
   }
@@ -81,6 +121,13 @@ export default function SourcePanel({ answerPayload }) {
     setReportError("");
   }, [answerPayload?.question]);
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleGenerateQualityReport` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleGenerateQualityReport() {
     const question = String(answerPayload?.question || "").trim();
     if (!question) {

@@ -7,6 +7,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+backend/chroma_db/
+backend/backend/chroma_db/
+
 # Virtual env
 venv/
 .env

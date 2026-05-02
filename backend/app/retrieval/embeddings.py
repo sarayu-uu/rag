@@ -12,6 +12,11 @@ from app.config.settings import EMBEDDING_MODEL, VECTOR_DIMENSION
 
 
 @lru_cache(maxsize=1)
+# Detailed function explanation:
+# - Purpose: `_get_embedding_model` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _get_embedding_model():
     try:
         from fastembed import TextEmbedding
@@ -23,6 +28,11 @@ def _get_embedding_model():
     return TextEmbedding(model_name=EMBEDDING_MODEL)
 
 
+# Detailed function explanation:
+# - Purpose: `_validate_vector_dimension` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _validate_vector_dimension(vector: list[float]) -> None:
     if len(vector) != VECTOR_DIMENSION:
         raise RuntimeError(
@@ -31,6 +41,11 @@ def _validate_vector_dimension(vector: list[float]) -> None:
         )
 
 
+# Detailed function explanation:
+# - Purpose: `embed_texts` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def embed_texts(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
@@ -46,6 +61,11 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return output
 
 
+# Detailed function explanation:
+# - Purpose: `embed_query` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def embed_query(text: str) -> list[float]:
     query = text.strip()
     if not query:

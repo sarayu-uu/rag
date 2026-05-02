@@ -1,3 +1,8 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";

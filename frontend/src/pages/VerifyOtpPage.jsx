@@ -1,7 +1,19 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { verifyOtp } from "../lib/api";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `VerifyOtpPage` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function VerifyOtpPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -14,6 +26,13 @@ export default function VerifyOtpPage() {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleSubmit` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);

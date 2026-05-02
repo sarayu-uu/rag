@@ -1,7 +1,19 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `EyeIcon` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function EyeIcon({ open }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="password-visibility-icon">
@@ -17,6 +29,13 @@ function EyeIcon({ open }) {
   );
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `LoginPage` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -26,6 +45,13 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleSubmit` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);

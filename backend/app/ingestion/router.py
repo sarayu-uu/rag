@@ -1,7 +1,10 @@
 """
 File purpose:
-- Routes uploaded files to the correct loader based on file extension.
-- Centralizes file-type dispatch so API code stays simple.
+- Acts as the ingestion dispatch layer between raw inputs and format-specific loaders.
+- Keeps route handlers clean by centralizing: input type detection, URL validation,
+  metadata packaging, and loader invocation.
+- Returns a consistent structure (`text` + `metadata`) that downstream cleaning/chunking
+  code can use without caring about source type details.
 """
 
 from pathlib import Path
@@ -24,7 +27,14 @@ from .loaders import (
 )
 
 
+# Detailed function explanation:
+# - Purpose: `load_file` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def load_file(file_path: Union[str, Path]) -> str:
+    # Detect file extension and forward to the right extraction function.
+    # This is the single switch-point for supported local file types.
     file_path = Path(file_path)
     suffix = file_path.suffix.lower()
 
@@ -62,7 +72,14 @@ def load_file(file_path: Union[str, Path]) -> str:
         raise ValueError(f"Unsupported file type: {suffix}")
 
 
+# Detailed function explanation:
+# - Purpose: `load_url` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def load_url(url: str) -> str:
+    # Validate URL shape first so downstream loader gets only proper http/https inputs.
+    # Then load and extract visible text from the web page.
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("Invalid URL. Please provide a full http/https URL.")
@@ -73,11 +90,21 @@ def load_url(url: str) -> str:
         raise ValueError(f"Failed to load URL: {exc}") from exc
 
 
+# Detailed function explanation:
+# - Purpose: `load_file_with_metadata` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def load_file_with_metadata(
     file_path: Union[str, Path],
     *,
     document_name: str | None = None,
 ) -> dict[str, Any]:
+    # Standardize file extraction output into:
+    # 1) extracted text
+    # 2) metadata used by DB records and citations later.
+    #
+    # PDFs are handled specially to preserve page numbers for source attribution.
     file_path = Path(file_path)
     suffix = file_path.suffix.lower()
 
@@ -102,7 +129,14 @@ def load_file_with_metadata(
     }
 
 
+# Detailed function explanation:
+# - Purpose: `load_url_with_metadata` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def load_url_with_metadata(url: str) -> dict[str, Any]:
+    # Same normalized contract as file-based loader, but for web URLs.
+    # `document_name` is set to domain so UI/citations have a readable source label.
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("Invalid URL. Please provide a full http/https URL.")

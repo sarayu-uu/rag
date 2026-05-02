@@ -1,5 +1,17 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useEffect, useRef } from "react";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `formatTime` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function formatTime(value) {
   if (!value) {
     return "";
@@ -11,6 +23,13 @@ function formatTime(value) {
   return date.toLocaleString();
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `ChatWindow` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function ChatWindow({
   sessionInfo,
   messages,

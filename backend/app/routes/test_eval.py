@@ -10,9 +10,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.auth.security import get_current_user
-from app.models.mysql import RoleName, User
+from app.models.mysql import Document, RoleName, User, get_db
 from app.retrieval.embeddings import embed_query, embed_texts
 from app.services.rag_chat import answer_question_with_retrieval
 
@@ -92,13 +94,28 @@ class EvalResponse(BaseModel):
 class _FastEmbedLangchainEmbeddings:
     """Small adapter so RAGAS can reuse the repo's FastEmbed embeddings."""
 
+    # Detailed function explanation:
+    # - Purpose: `embed_documents` handles one focused step of this module's workflow.
+    # - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+    # - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+    #   (or raises a clear exception) so downstream code can continue reliably.
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return embed_texts(texts)
 
+    # Detailed function explanation:
+    # - Purpose: `embed_query` handles one focused step of this module's workflow.
+    # - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+    # - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+    #   (or raises a clear exception) so downstream code can continue reliably.
     def embed_query(self, text: str) -> list[float]:
         return embed_query(text)
 
 
+# Detailed function explanation:
+# - Purpose: `_safe_float` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _safe_float(value: Any) -> float:
     try:
         return float(value)
@@ -106,6 +123,11 @@ def _safe_float(value: Any) -> float:
         return 0.0
 
 
+# Detailed function explanation:
+# - Purpose: `_extract_ragas_metrics` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _extract_ragas_metrics(result: Any) -> dict[str, float]:
     if hasattr(result, "to_pandas"):
         frame = result.to_pandas()
@@ -125,6 +147,11 @@ def _extract_ragas_metrics(result: Any) -> dict[str, float]:
     return {}
 
 
+# Detailed function explanation:
+# - Purpose: `_run_ragas` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _run_ragas(
     *,
     question: str,
@@ -207,13 +234,21 @@ def _run_ragas(
     response_model=EvalResponse,
     summary="Evaluate retrieval relevance and optional RAGAS metrics",
     description=(
+        "Usage: Testing/quality-evaluation endpoint (admin-only), not regular end-user chat flow. "
+        "Purpose: run one RAG query and return retrieval diagnostics plus optional RAGAS scores.\n\n"
         "Runs your live RAG pipeline for one question, then returns:\n"
         "1) retrieval relevance scores (semantic distance + hybrid rerank), and\n"
         "2) RAGAS quality metrics (when dependencies and model settings are available)."
     ),
 )
+# Detailed function explanation:
+# - Purpose: `evaluate_rag` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def evaluate_rag(
     payload: EvalRequest,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> EvalResponse:
     role_name = current_user.role.name if current_user.role else None
@@ -221,9 +256,11 @@ def evaluate_rag(
         raise HTTPException(status_code=403, detail="Quality evaluation is available only to admin users.")
 
     try:
+        document_ids = list(db.scalars(select(Document.id)).all())
         result = answer_question_with_retrieval(
             payload.question,
             limit=payload.limit,
+            document_ids=document_ids,
             owner_user_id=None,
         )
     except ValueError as exc:

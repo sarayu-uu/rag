@@ -27,10 +27,20 @@ from app.models.mysql import RoleName, User, get_db
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+# Detailed function explanation:
+# - Purpose: `hash_password` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
+# Detailed function explanation:
+# - Purpose: `verify_password` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def verify_password(password: str, password_hash: str) -> bool:
     try:
         return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
@@ -38,6 +48,11 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+# Detailed function explanation:
+# - Purpose: `_create_token` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _create_token(*, user: User, token_type: str, expires_delta: timedelta) -> str:
     now = datetime.now(timezone.utc)
     payload: dict[str, Any] = {
@@ -51,6 +66,11 @@ def _create_token(*, user: User, token_type: str, expires_delta: timedelta) -> s
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
+# Detailed function explanation:
+# - Purpose: `create_access_token` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def create_access_token(user: User) -> str:
     return _create_token(
         user=user,
@@ -59,6 +79,11 @@ def create_access_token(user: User) -> str:
     )
 
 
+# Detailed function explanation:
+# - Purpose: `create_refresh_token` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def create_refresh_token(user: User) -> str:
     return _create_token(
         user=user,
@@ -67,6 +92,11 @@ def create_refresh_token(user: User) -> str:
     )
 
 
+# Detailed function explanation:
+# - Purpose: `decode_token` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def decode_token(token: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
@@ -78,6 +108,11 @@ def decode_token(token: str) -> dict[str, Any]:
     return payload
 
 
+# Detailed function explanation:
+# - Purpose: `get_current_user` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
@@ -116,6 +151,11 @@ def get_current_user(
     return user
 
 
+# Detailed function explanation:
+# - Purpose: `is_privileged_user` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def is_privileged_user(user: User) -> bool:
     role_name = user.role.name if user.role else None
     return role_name in {RoleName.ADMIN, RoleName.MANAGER}

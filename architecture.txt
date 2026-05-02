@@ -1,94 +1,139 @@
-RAG Repository Architecture
-===========================
-
-Note:
-- This document reflects the current repo structure after Phase 1, 2, and 3 backend ingestion work.
-- Large generated folders such as `venv`, `frontend/node_modules`, and Python `__pycache__` folders are not expanded.
-- `.env` is mentioned only as a config file; no secret values are documented here.
-
 rag/
-|-- .git/                                  -> Git metadata and repository history.
-|-- .gitignore                             -> Ignores local env files, virtual environments, build output, and caches.
-|-- README.md                              -> Basic setup and run instructions.
-|-- architecture.txt                       -> This repository structure and architecture overview.
-|-- pipeline.txt                           -> Phase-by-phase build plan for the RAG system.
+|-- .gitignore                         # Ignore rules
+|-- README.md                          # Setup/run guide
+|-- pipeline.txt                       # Phase plan
+|-- architecture.txt                   # Architecture notes
+|-- points.txt                         # Project notes
 |
-|-- backend/                               -> Python backend for ingestion, storage, and chatbot services.
-|   |-- .env                               -> Backend environment variables.
-|   |-- .env.example                       -> Example backend environment variable template.
-|   |-- chat_cli.py                        -> Terminal-based Groq chatbot entry point.
-|   |-- requirements.txt                   -> Python dependencies used by the backend.
+|-- backend/
+|   |-- .env                           # Runtime env vars
+|   |-- .env.example                   # Env template
+|   |-- requirements.txt               # Python deps
+|   |-- chat_cli.py                    # CLI chatbot entrypoint
 |   |
-|   |-- app/                               -> Main backend application package.
-|   |   |-- main.py                        -> FastAPI app entry point, startup DB bootstrap, CORS, and route registration.
+|   |-- app/
+|   |   |-- main.py                    # FastAPI app, routers, middleware, health
 |   |   |
-|   |   |-- auth/                          -> Placeholder package for later authentication work.
-|   |   |   |-- __init__.py                -> Notes that JWT/signup/login will be added in later phases.
+|   |   |-- config/
+|   |   |   `-- settings.py            # Env loading + config constants
 |   |   |
-|   |   |-- config/                        -> Backend configuration.
-|   |   |   |-- settings.py                -> Loads `.env`, DB URL, upload path, CORS, and ingestion defaults.
+|   |   |-- models/
+|   |   |   `-- mysql.py               # SQLAlchemy models + DB init/seed
 |   |   |
-|   |   |-- ingestion/                     -> Core ingestion pipeline utilities.
-|   |   |   |-- loaders.py                 -> Extracts text from PDF, DOC/DOCX, PPT/PPTX, images, CSV, JSON, XML, TXT, and URLs.
-|   |   |   |-- router.py                  -> Dispatches files/URLs to the correct loader based on extension/source type.
-|   |   |   |-- validators.py              -> Validates file type, file size, and extracted content quality.
-|   |   |   |-- text_cleaning.py           -> Cleans and normalizes extracted text before chunking.
-|   |   |   |-- chunking.py                -> Performs recursive and semantic chunking, including page-aware PDF chunking helpers.
-|   |   |   |-- document_record.py         -> Builds DB payloads and saves `documents` and `document_chunks` records.
+|   |   |-- auth/
+|   |   |   |-- __init__.py
+|   |   |   |-- security.py            # JWT, password hashing, auth deps
+|   |   |   `-- permissions.py         # RBAC + document access filters
 |   |   |
-|   |   |-- models/                        -> SQLAlchemy setup and ORM models.
-|   |   |   |-- mysql.py                   -> DB engine/session setup plus tables for users, roles, documents, chunks, chat, permissions, and metrics.
+|   |   |-- ingestion/
+|   |   |   |-- loaders.py             # Parse PDF/DOCX/PPTX/IMG/CSV/JSON/XML/URL
+|   |   |   |-- router.py              # Route source type to loader
+|   |   |   |-- validators.py          # File/content validation
+|   |   |   |-- text_cleaning.py       # Text normalization/cleanup
+|   |   |   |-- chunking.py            # Chunk generation logic
+|   |   |   `-- document_record.py     # Save docs/chunks in MySQL
 |   |   |
-|   |   |-- retrieval/                     -> Placeholder package for vector retrieval and search logic in later phases.
-|   |   |   |-- __init__.py                -> Marks retrieval as a package.
+|   |   |-- retrieval/
+|   |   |   |-- __init__.py
+|   |   |   |-- embeddings.py          # Embedding generation
+|   |   |   |-- chroma_store.py        # Chroma CRUD/search/health
+|   |   |   `-- service.py             # Retrieval orchestration + indexing helpers
 |   |   |
-|   |   |-- routes/                        -> FastAPI route modules.
-|   |   |   |-- ingestion_steps.py         -> Step-wise ingestion APIs:
-|   |   |   |                                `/ingestion/load`
-|   |   |   |                                `/ingestion/clean`
-|   |   |   |                                `/ingestion/chunk`
-|   |   |   |                                `/ingestion/uploadtochunk`
+|   |   |-- services/
+|   |   |   |-- chatgroq_bot.py        # LLM client and chat model helpers
+|   |   |   |-- rag_chat.py            # RAG answer pipeline
+|   |   |   |-- chat_history.py        # Sessions/messages persistence helpers
+|   |   |   `-- email_service.py       # OTP email sending helpers
 |   |   |
-|   |   |-- services/                      -> Reusable backend services.
-|   |   |   |-- chatgroq_bot.py            -> Minimal chatbot service used by the CLI flow.
+|   |   |-- telemetry/
+|   |   |   |-- __init__.py
+|   |   |   |-- middleware.py          # Per-request telemetry capture
+|   |   |   `-- service.py             # Telemetry aggregation + cost/token helpers
 |   |   |
-|   |   |-- telemetry/                     -> Placeholder package for future telemetry/observability work.
-|   |   |   |-- __init__.py                -> Marks telemetry as a package.
+|   |   |-- prompts/
+|   |   |   |-- rag_system.jinja2      # System prompt template
+|   |   |   `-- rag_user.jinja2        # User/context prompt template
+|   |   |
+|   |   `-- routes/
+|   |       |-- auth.py                # /auth/*
+|   |       |-- documents.py           # /documents/*
+|   |       |-- ingestion_steps.py     # /ingestion/*
+|   |       |-- retrieval.py           # /retrieval/*
+|   |       |-- chat.py                # /chat/*
+|   |       |-- admin.py               # /admin/*
+|   |       |-- metrics.py             # /metrics, /telemetry
+|   |       `-- test_eval.py           # /test/evaluate
 |   |
-|   |-- testing/                           -> Small local scratch/test scripts.
-|   |   |-- satwik.py                      -> Experimental script.
-|   |   |-- sarayu.py                      -> Experimental script.
-|   |
-|   |-- uploads/                           -> Stored uploaded source files used by the ingestion flow.
-|   |-- __pycache__/                       -> Generated Python bytecode cache.
+|   |-- uploads/                        # Uploaded files
+|   |-- chroma_db/                      # Vector DB persistence
+|   |-- test/
+|   |   `-- run_eval_example.py         # Eval endpoint caller script
+|   `-- testing/
+|       |-- satwik.py                   # Scratch
+|       `-- sarayu.py                   # Scratch
 |
-|-- frontend/                              -> React + TypeScript frontend.
-|   |-- index.html                         -> Vite HTML entry.
-|   |-- package.json                       -> Frontend scripts and dependencies.
-|   |-- package-lock.json                  -> Locked npm dependency versions.
-|   |-- tsconfig.json                      -> Main TypeScript config.
-|   |-- tsconfig.node.json                 -> TypeScript config for Node/Vite tooling.
-|   |-- vite.config.ts                     -> Vite build/dev server configuration.
-|   |-- src/                               -> Frontend source code.
-|   |   |-- App.tsx                        -> Root React component.
-|   |   |-- main.tsx                       -> Browser entry point.
-|   |   |-- styles.css                     -> Shared frontend styling.
-|   |   |-- vite-env.d.ts                  -> Vite environment typings.
-|   |   |-- components/                    -> Reusable frontend components.
-|   |   |   |-- Upload.tsx                 -> Upload UI; should target the ingestion APIs instead of the removed `/upload` route.
-|   |-- node_modules/                      -> Installed frontend dependencies; generated locally.
-|
-|-- venv/                                  -> Local Python virtual environment; generated locally.
-
-Current backend ingestion flow:
-1. A client calls `/ingestion/load` or `/ingestion/uploadtochunk`.
-2. The backend validates the input and stores uploaded files in `backend/uploads`.
-3. The ingestion router selects the right loader and extracts raw text.
-4. The text-cleaning layer normalizes and cleans the extracted text.
-5. The chunking layer creates recursive or semantic chunks.
-6. The backend stores document metadata in `documents` and chunk records in `document_chunks`.
-
-Current Phase 1-3 outcome:
-- Phase 1: FastAPI, config, MySQL, SQLAlchemy, and core schema are in place.
-- Phase 2: Multi-format ingestion and document metadata storage are working.
-- Phase 3: Cleaning, chunking, PDF page-aware chunks, semantic chunking, and chunk persistence are working.
+`-- frontend/
+    |-- package.json                    # Scripts + deps
+    |-- package-lock.json
+    |-- index.html
+    |-- vite.config.ts
+    |-- tsconfig.json
+    |-- tsconfig.node.json
+    |
+    `-- src/
+        |-- main.jsx                    # React entry + router mount
+        |-- App.jsx                     # Route tree + guards
+        |-- styles.css                  # Global styling
+        |
+        |-- context/
+        |   `-- AuthContext.jsx         # Auth state provider
+        |
+        |-- lib/
+        |   |-- api.js                  # API client + token refresh
+        |   `-- roles.js                # Role constants/helpers
+        |
+        |-- pages/
+        |   |-- LoginPage.jsx
+        |   |-- SignupPage.jsx
+        |   |-- VerifyOtpPage.jsx
+        |   |-- DashboardPage.jsx
+        |   |-- DocumentsPage.jsx
+        |   |-- ChatPage.jsx
+        |   |-- ProfilePage.jsx
+        |   |-- AdminUsersPage.jsx
+        |   |-- AdminPermissionsPage.jsx
+        |   |-- TelemetryPage.jsx
+        |   `-- NotFoundPage.jsx
+        |
+        `-- components/
+            |-- auth/
+            |   |-- ProtectedRoute.jsx
+            |   |-- PublicOnlyRoute.jsx
+            |   `-- DummyAuthPage.jsx
+            |-- layout/
+            |   |-- AppShell.jsx
+            |   `-- WorkspaceSidebar.jsx
+            |-- chat/
+            |   |-- ChatWindow.jsx
+            |   |-- ChatComposer.jsx
+            |   |-- ChatTranscript.jsx
+            |   |-- SessionSidebar.jsx
+            |   |-- SessionList.jsx
+            |   |-- SourcePanel.jsx
+            |   `-- HistoryInspector.jsx
+            |-- documents/
+            |   `-- UploadCard.jsx
+            |-- ingestion/
+            |   `-- IngestionPanel.jsx
+            |-- common/
+            |   |-- EmptyState.jsx
+            |   |-- SectionHeader.jsx
+            |   `-- StatCard.jsx
+            |-- panels/
+            |   |-- DocumentsPanel.jsx
+            |   `-- DummyTablePanel.jsx
+            `-- roles/
+                |-- admin/AdminHome.jsx
+                |-- editor/EditorHome.jsx
+                |-- viewer/ViewerHome.jsx
+                `-- super_admin/SuperAdminHome.jsx

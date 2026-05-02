@@ -1,3 +1,8 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
 import { getDocuments, updateDocumentPermissions } from "../lib/api";
@@ -13,6 +18,13 @@ const INITIAL_FORM = {
   can_edit: false,
 };
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `AdminPermissionsPage` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function AdminPermissionsPage() {
   const [documents, setDocuments] = useState([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
@@ -21,6 +33,13 @@ export default function AdminPermissionsPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `loadDocuments` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function loadDocuments() {
     try {
       const response = await getDocuments();
@@ -38,6 +57,13 @@ export default function AdminPermissionsPage() {
     loadDocuments();
   }, []);
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleSubmit` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleSubmit(event) {
     event.preventDefault();
     if (!selectedDocumentId) {

@@ -53,10 +53,20 @@ class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., min_length=1)
 
 
+# Detailed function explanation:
+# - Purpose: `_generate_otp` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _generate_otp() -> str:
     return f"{random.randint(0, 999999):06d}"
 
 
+# Detailed function explanation:
+# - Purpose: `_serialize_user` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _serialize_user(user: User) -> dict[str, Any]:
     return {
         "id": user.id,
@@ -69,6 +79,11 @@ def _serialize_user(user: User) -> dict[str, Any]:
     }
 
 
+# Detailed function explanation:
+# - Purpose: `_normalize_email` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _normalize_email(value: str) -> str:
     email = value.strip().lower()
     if "@" not in email or "." not in email.split("@", 1)[-1]:
@@ -76,6 +91,11 @@ def _normalize_email(value: str) -> str:
     return email
 
 
+# Detailed function explanation:
+# - Purpose: `_get_signup_role` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _get_signup_role(db: Session) -> Role:
     role = db.scalar(select(Role).where(Role.name == DEFAULT_SIGNUP_ROLE))
     if role is None:
@@ -85,6 +105,11 @@ def _get_signup_role(db: Session) -> Role:
     return role
 
 
+# Detailed function explanation:
+# - Purpose: `_get_user_by_email` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _get_user_by_email(db: Session, email: str) -> User | None:
     return db.scalar(
         select(User)
@@ -93,7 +118,7 @@ def _get_user_by_email(db: Session, email: str) -> User | None:
     )
 
 
-@router.post("/signup", summary="Register a user and send an OTP")
+@router.post("/signup", summary="Phase 13: Register a user and send an OTP")
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     normalized_email = _normalize_email(payload.email)
     existing_by_email = _get_user_by_email(db, normalized_email)
@@ -155,7 +180,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
     }
 
 
-@router.post("/verify-otp", summary="Verify signup OTP and activate the account")
+@router.post("/verify-otp", summary="Phase 13: Verify a signup OTP and activate the account")
 def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     email = _normalize_email(payload.email)
     record = OTP_STORE.get(email)
@@ -185,7 +210,7 @@ def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict
     }
 
 
-@router.post("/login", summary="Authenticate user and issue JWT tokens")
+@router.post("/login", summary="Phase 13: Authenticate a verified user and issue JWTs")
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     user = _get_user_by_email(db, _normalize_email(payload.email))
     if user is None or not verify_password(payload.password, user.password_hash):
@@ -202,7 +227,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any
     }
 
 
-@router.post("/refresh", summary="Exchange refresh token for a new access token")
+@router.post("/refresh", summary="Phase 13: Exchange a refresh token for a new access token")
 def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     token_payload = decode_token(payload.refresh_token)
     if token_payload.get("type") != "refresh":
@@ -225,7 +250,7 @@ def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)) -> dic
     }
 
 
-@router.get("/me", summary="Get authenticated user profile")
+@router.get("/me", summary="Phase 13: Get the authenticated user profile")
 def get_me(current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     return {
         "status": "success",

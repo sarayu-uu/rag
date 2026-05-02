@@ -349,6 +349,7 @@ Suggested API groups:
 5. Telemetry and health APIs
 - GET /health
 - GET /metrics
+- GET /telemetry
 
 Design principles:
 - modular architecture
@@ -359,6 +360,15 @@ Design principles:
 
 Desired outcome:
 - The backend exposes a clean, modular API surface that the frontend and admin workflows can use consistently for upload, chat, auth, permissions, and monitoring.
+
+Additional API coverage to include:
+- Retrieval APIs:
+  - POST /retrieval/search
+  - POST /retrieval/reindex/{document_id}
+- Chat lifecycle APIs:
+  - DELETE /chat/sessions/{id}
+- Quality evaluation API:
+  - POST /test/evaluate
 
 ========================================================================
 PHASE 13: AUTHENTICATION AND JWT
@@ -463,6 +473,33 @@ Desired outcome:
 - The project is well documented enough for another developer, reviewer, or AI assistant to understand the architecture, setup steps, APIs, and design choices quickly.
 
 ========================================================================
+PHASE 17: RETRIEVAL & ANSWER QUALITY EVALUATION
+========================================================================
+
+Required capability:
+- Add a reproducible evaluation path for both retrieval quality and answer quality.
+
+Suggested implementation:
+- Admin-only evaluation endpoint
+- Single request should run:
+  - retrieval + reranking diagnostics
+  - grounded answer generation
+  - optional RAGAS metrics
+
+Track and report:
+- semantic distance and rerank score per selected chunk
+- selected vs retrieved chunk counts
+- retrieval latency
+- RAGAS metrics where available:
+  - faithfulness
+  - answer relevancy
+  - context precision
+  - context recall
+
+Desired outcome:
+- The team can validate whether retrieval and response quality are improving over time, not just whether endpoints are functioning.
+
+========================================================================
 FINAL IMPLEMENTATION ORDER
 ========================================================================
 
@@ -478,9 +515,10 @@ Recommended build order:
 9. Telemetry and metrics
 10. Auth + JWT
 11. RBAC
-12. Streamlit frontend
+12. React frontend
 13. Security hardening + caching + async workflows
-14. Documentation and evaluation
+14. Documentation
+15. Retrieval and answer-quality evaluation
 
 ========================================================================
 FINAL NOTES

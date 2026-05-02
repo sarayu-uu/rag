@@ -32,6 +32,11 @@ class UpdateDocumentPermissionRequest(BaseModel):
     can_edit: bool = False
 
 
+# Detailed function explanation:
+# - Purpose: `_require_admin_user` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _require_admin_user(current_user: User = Depends(get_current_user)) -> User:
     role_name = current_user.role.name if current_user.role else None
     if role_name not in {RoleName.ADMIN, RoleName.MANAGER}:
@@ -42,6 +47,11 @@ def _require_admin_user(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+# Detailed function explanation:
+# - Purpose: `_require_supervising_admin` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _require_supervising_admin(current_user: User = Depends(get_current_user)) -> User:
     role_name = current_user.role.name if current_user.role else None
     if role_name != RoleName.ADMIN:
@@ -52,6 +62,11 @@ def _require_supervising_admin(current_user: User = Depends(get_current_user)) -
     return current_user
 
 
+# Detailed function explanation:
+# - Purpose: `_serialize_user` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _serialize_user(user: User) -> dict[str, Any]:
     return {
         "id": user.id,
@@ -64,6 +79,11 @@ def _serialize_user(user: User) -> dict[str, Any]:
     }
 
 
+# Detailed function explanation:
+# - Purpose: `_serialize_permission` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _serialize_permission(permission: Permission) -> dict[str, Any]:
     return {
         "id": permission.id,
@@ -79,7 +99,7 @@ def _serialize_permission(permission: Permission) -> dict[str, Any]:
     }
 
 
-@router.get("/users", summary="List users for admin workflows")
+@router.get("/users", summary="Phase 12: List users for admin workflows")
 def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(_require_admin_user),
@@ -96,7 +116,7 @@ def list_users(
     }
 
 
-@router.patch("/users/{user_id}/role", summary="Update a user's RBAC role")
+@router.patch("/users/{user_id}/role", summary="Phase 12: Update a user's RBAC role")
 def update_user_role(
     user_id: int,
     payload: UpdateUserRoleRequest,
@@ -122,7 +142,16 @@ def update_user_role(
     }
 
 
-@router.delete("/users/{user_id}", summary="Phase 12: Delete a non-admin user")
+@router.delete(
+    "/users/{user_id}",
+    summary="Phase 12: Delete a non-admin user",
+    description="Usage: Used by frontend admin users page. Purpose: delete a non-admin user account.",
+)
+# Detailed function explanation:
+# - Purpose: `delete_user` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -150,7 +179,7 @@ def delete_user(
     }
 
 
-@router.patch("/documents/{document_id}/permissions", summary="Update one document permission rule")
+@router.patch("/documents/{document_id}/permissions", summary="Phase 12: Update one document permission rule")
 def update_document_permissions(
     document_id: int,
     payload: UpdateDocumentPermissionRequest,

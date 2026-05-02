@@ -1,6 +1,18 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useEffect, useRef } from "react";
 import EmptyState from "../common/EmptyState";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `formatRole` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function formatRole(role) {
   if (!role) {
     return "Message";
@@ -8,6 +20,13 @@ function formatRole(role) {
   return String(role).toLowerCase();
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `ChatTranscript` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function ChatTranscript({ messages, pendingAnswer, loading, children }) {
   const scrollRef = useRef(null);
 

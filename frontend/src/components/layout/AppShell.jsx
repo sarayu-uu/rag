@@ -1,3 +1,8 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
@@ -13,6 +18,13 @@ const NAV_ITEMS = [
   { key: "permissions", label: "Permissions", to: "/admin/permissions", accent: "policy" },
 ];
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `ShellIcon` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function ShellIcon({ children }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-icon">
@@ -64,6 +76,13 @@ const NAV_ICONS = {
   ),
 };
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `AppShell` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function AppShell() {
   const { user, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -87,6 +106,13 @@ export default function AppShell() {
   }, [allowedItems, location.pathname]);
   const isChatRoute = location.pathname.startsWith("/chat");
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleLogout` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   function handleLogout() {
     signOut();
     navigate("/login");

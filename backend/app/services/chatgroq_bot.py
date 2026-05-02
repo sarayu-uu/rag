@@ -21,6 +21,11 @@ SYSTEM_PROMPT = (
 )
 
 
+# Detailed function explanation:
+# - Purpose: `build_chat_model` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def build_chat_model() -> ChatGroq:
     if not GROQ_API_KEY:
         raise ValueError(
@@ -34,6 +39,11 @@ def build_chat_model() -> ChatGroq:
     )
 
 
+# Detailed function explanation:
+# - Purpose: `run_cli_chatbot` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def run_cli_chatbot() -> None:
     chat_model = build_chat_model()
     history = [SystemMessage(content=SYSTEM_PROMPT)]

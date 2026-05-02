@@ -22,6 +22,11 @@ from app.routes.ingestion_steps import _run_upload_pipeline
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
+# Detailed function explanation:
+# - Purpose: `_serialize_document` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _serialize_document(document: Document, chunk_count: int) -> dict[str, Any]:
     uploader_payload: dict[str, Any] | None = None
     if getattr(document, "uploader", None) is not None:
@@ -45,6 +50,11 @@ def _serialize_document(document: Document, chunk_count: int) -> dict[str, Any]:
     }
 
 
+# Detailed function explanation:
+# - Purpose: `_get_document_with_chunk_count` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _get_document_with_chunk_count(
     db: Session,
     document_id: int,
@@ -68,7 +78,16 @@ def _get_document_with_chunk_count(
     return row[0], int(row[1] or 0)
 
 
-@router.post("/upload", summary="Upload document and run default ingestion pipeline")
+@router.post(
+    "/upload",
+    summary="Phase 12: Upload a document through the default ingestion pipeline",
+    description="Usage: Used by frontend document upload. Purpose: ingest, chunk, persist, and index one file or URL.",
+)
+# Detailed function explanation:
+# - Purpose: `upload_document` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def upload_document(
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
@@ -90,7 +109,16 @@ def upload_document(
     )
 
 
-@router.get("", summary="List stored documents")
+@router.get(
+    "",
+    summary="Phase 12: List stored documents",
+    description="Usage: Used by frontend documents page. Purpose: returns accessible documents with chunk counts.",
+)
+# Detailed function explanation:
+# - Purpose: `list_documents` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def list_documents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -122,7 +150,16 @@ def list_documents(
     }
 
 
-@router.get("/{document_id}", summary="Get one stored document")
+@router.get(
+    "/{document_id}",
+    summary="Phase 12: Get one stored document",
+    description="Usage: Used by frontend document details. Purpose: fetches one accessible document and metadata.",
+)
+# Detailed function explanation:
+# - Purpose: `get_document` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_document(
     document_id: int,
     db: Session = Depends(get_db),
@@ -139,7 +176,16 @@ def get_document(
     }
 
 
-@router.delete("/{document_id}", summary="Delete a stored document and its vectors")
+@router.delete(
+    "/{document_id}",
+    summary="Phase 12: Delete a stored document and its vectors",
+    description="Usage: Used by frontend document actions. Purpose: removes the document from MySQL and vector store.",
+)
+# Detailed function explanation:
+# - Purpose: `delete_document` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),

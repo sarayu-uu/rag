@@ -1,9 +1,21 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
 import StatCard from "../components/common/StatCard";
 import { evaluateQualityReport, getHealth, getTelemetry } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `MetricHelp` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function MetricHelp({ label, hint }) {
   return (
     <span className="metric-inline-label">
@@ -16,6 +28,13 @@ function MetricHelp({ label, hint }) {
   );
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `TelemetryPage` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function TelemetryPage() {
   const { user } = useAuth();
   const [hours, setHours] = useState(24);
@@ -31,6 +50,13 @@ export default function TelemetryPage() {
   const canRunEval =
     user?.role === "Admin" || user?.role === "SuperAdmin" || user?.role === "Super Admin";
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `loadTelemetry` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function loadTelemetry(windowHours = hours) {
     setLoading(true);
     setError("");
@@ -52,6 +78,13 @@ export default function TelemetryPage() {
     loadTelemetry(hours);
   }, []);
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `runEvaluation` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function runEvaluation(event) {
     event.preventDefault();
     if (!evalQuestion.trim()) {
