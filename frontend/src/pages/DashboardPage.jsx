@@ -1,3 +1,8 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
 import StatCard from "../components/common/StatCard";
@@ -5,6 +10,13 @@ import { useAuth } from "../context/AuthContext";
 import { getDocuments, getHealth, getMetrics } from "../lib/api";
 import { getRoleDefinition, isManagementRole, ROLE_KEYS } from "../lib/roles";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `scopeCopy` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function scopeCopy(metrics, userRole) {
   if (metrics?.scope === "global" || isManagementRole(userRole)) {
     return "all users";
@@ -12,10 +24,24 @@ function scopeCopy(metrics, userRole) {
   return "your account";
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `countForType` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function countForType(metrics, requestType) {
   return metrics?.by_request_type?.[requestType]?.request_count ?? 0;
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `buildMetricCards` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function buildMetricCards({ documents, health, metricTotals, metrics, userRole }) {
   const scope = scopeCopy(metrics, userRole);
   const documentHint = isManagementRole(userRole)
@@ -97,6 +123,13 @@ function buildMetricCards({ documents, health, metricTotals, metrics, userRole }
   ];
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `DashboardPage` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function DashboardPage() {
   const { user } = useAuth();
   const [health, setHealth] = useState(null);
@@ -106,6 +139,13 @@ export default function DashboardPage() {
   const roleDefinition = getRoleDefinition(user?.role);
 
   useEffect(() => {
+    /**
+     * Detailed function explanation:
+     * - Purpose: `loadDashboard` handles a specific UI/data responsibility in this file.
+     * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+     * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+     *   predictable UI output or data transformations used by the next step.
+     */
     async function loadDashboard() {
       try {
         const [healthResponse, metricsResponse, documentsResponse] = await Promise.all([

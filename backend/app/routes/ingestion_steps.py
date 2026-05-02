@@ -62,6 +62,11 @@ class ChunkTextRequest(BaseModel):
     chunk_overlap: int = Field(default=100, description="Character overlap between adjacent chunks.")
 
 
+# Detailed function explanation:
+# - Purpose: `_normalize_url_input` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _normalize_url_input(url: str | None) -> str | None:
     if url is None:
         return None
@@ -71,6 +76,11 @@ def _normalize_url_input(url: str | None) -> str | None:
     return value
 
 
+# Detailed function explanation:
+# - Purpose: `_save_upload` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _save_upload(file: UploadFile, ext: str) -> tuple[Path, int, str]:
     file_size = validate_file_size(file)
     safe_name = f"{Path(file.filename).stem}_{uuid4().hex[:8]}{ext}"
@@ -82,6 +92,11 @@ def _save_upload(file: UploadFile, ext: str) -> tuple[Path, int, str]:
     return file_path, file_size, safe_name
 
 
+# Detailed function explanation:
+# - Purpose: `_single_input_guard` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _single_input_guard(file: UploadFile | None, url: str | None) -> None:
     if (file is None and not url) or (file is not None and url):
         raise HTTPException(
@@ -90,6 +105,11 @@ def _single_input_guard(file: UploadFile | None, url: str | None) -> None:
         )
 
 
+# Detailed function explanation:
+# - Purpose: `_validate_chunk_form_inputs` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _validate_chunk_form_inputs(chunk_size: int, chunk_overlap: int) -> ChunkingConfig:
     if chunk_size <= 0:
         raise HTTPException(status_code=400, detail="chunk_size must be > 0.")
@@ -100,6 +120,11 @@ def _validate_chunk_form_inputs(chunk_size: int, chunk_overlap: int) -> Chunking
     return ChunkingConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
 
+# Detailed function explanation:
+# - Purpose: `_parse_permissions_tags` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _parse_permissions_tags(raw_value: str | None) -> list[str]:
     if not raw_value:
         return []
@@ -123,6 +148,11 @@ def _parse_permissions_tags(raw_value: str | None) -> list[str]:
     return [tag.strip() for tag in parsed if tag.strip()]
 
 
+# Detailed function explanation:
+# - Purpose: `_deserialize_permissions_tags` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _deserialize_permissions_tags(raw_value: str | None) -> list[str]:
     if not raw_value:
         return []
@@ -135,6 +165,11 @@ def _deserialize_permissions_tags(raw_value: str | None) -> list[str]:
     return [tag for tag in parsed if isinstance(tag, str)]
 
 
+# Detailed function explanation:
+# - Purpose: `_chunk_cleaned_text` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _chunk_cleaned_text(
     cleaned_text: str,
     *,
@@ -155,6 +190,11 @@ def _chunk_cleaned_text(
     )
 
 
+# Detailed function explanation:
+# - Purpose: `_chunk_pdf_document` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _chunk_pdf_document(
     document: Document,
     *,
@@ -184,6 +224,11 @@ def _chunk_pdf_document(
     )
 
 
+# Detailed function explanation:
+# - Purpose: `_build_chunks_for_document` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _build_chunks_for_document(
     document: Document,
     *,
@@ -212,6 +257,11 @@ def _build_chunks_for_document(
     )
 
 
+# Detailed function explanation:
+# - Purpose: `_get_document_or_404` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _get_document_or_404(db: Session, document_id: int, *, current_user: User | None = None) -> Document:
     document = db.scalar(select(Document).where(Document.id == document_id))
     if document is None:
@@ -221,6 +271,11 @@ def _get_document_or_404(db: Session, document_id: int, *, current_user: User | 
     return document
 
 
+# Detailed function explanation:
+# - Purpose: `_serialize_chunks` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _serialize_chunks(chunks: list[Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -238,6 +293,11 @@ def _serialize_chunks(chunks: list[Any]) -> list[dict[str, Any]]:
     ]
 
 
+# Detailed function explanation:
+# - Purpose: `_index_saved_chunks` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _index_saved_chunks(document_id: int, saved_chunks: list[Any]) -> dict[str, Any]:
     try:
         return sync_document_chunks_to_vector_store(saved_chunks)
@@ -251,7 +311,19 @@ def _index_saved_chunks(document_id: int, saved_chunks: list[Any]) -> dict[str, 
         ) from exc
 
 
-@router.post("/load", summary="Step 1: Load input and extract raw text")
+@router.post(
+    "/load",
+    summary="Step 1: Load input and extract raw text",
+    description=(
+        "Usage: Primarily for step-by-step testing/debug in Swagger. "
+        "Purpose: extract raw text and create initial document record."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `step_load` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def step_load(
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
@@ -349,6 +421,11 @@ def step_load(
     }
 
 
+# Detailed function explanation:
+# - Purpose: `_build_upload_response` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _build_upload_response(
     *,
     document: Document,
@@ -368,7 +445,7 @@ def _build_upload_response(
         "metadata": metadata,
         "raw_text_preview": raw_text[:1200],
         "cleaned_text_preview": cleaned_text[:1200],
-        "chunking_strategy": "fixed",
+        "chunking_strategy": "semantic",
         "chunk_count": len(saved_chunks),
         "vector_indexed": vector_indexed,
         "vector_collection": vector_collection,
@@ -376,6 +453,11 @@ def _build_upload_response(
     }
 
 
+# Detailed function explanation:
+# - Purpose: `_run_upload_pipeline` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _run_upload_pipeline(
     *,
     file: UploadFile | None = File(default=None),
@@ -538,7 +620,19 @@ def _run_upload_pipeline(
     return response
 
 
-@router.post("/uploadtochunk", summary="Step 1 to 3: Load, clean, and chunk in one request")
+@router.post(
+    "/uploadtochunk",
+    summary="Step 1 to 3: Load, clean, and chunk in one request",
+    description=(
+        "Usage: Testing/debug flow for ingestion stages. "
+        "Purpose: run load+clean+chunk and persist in MySQL without vector indexing."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `upload_to_chunk` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def upload_to_chunk(
     response: Response,
     file: UploadFile | None = File(default=None),
@@ -565,7 +659,19 @@ def upload_to_chunk(
     return payload
 
 
-@router.post("/upload", summary="Default upload: store document, chunks, and vectors automatically")
+@router.post(
+    "/upload",
+    summary="Default upload: store document, chunks, and vectors automatically",
+    description=(
+        "Usage: Alternate production ingestion endpoint; documents route also uses same pipeline. "
+        "Purpose: full ingest with chunk persistence and vector indexing."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `upload_document` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def upload_document(
     response: Response,
     file: UploadFile | None = File(default=None),
@@ -592,7 +698,19 @@ def upload_document(
     return payload
 
 
-@router.post("/upload-batch", summary="Batch upload: store multiple documents, chunks, and vectors")
+@router.post(
+    "/upload-batch",
+    summary="Batch upload: store multiple documents, chunks, and vectors",
+    description=(
+        "Usage: Batch ingestion utility for bulk upload operations/testing. "
+        "Purpose: ingest and index multiple files in one request."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `upload_documents_batch` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def upload_documents_batch(
     response: Response,
     files: list[UploadFile] = File(default_factory=list),
@@ -668,7 +786,16 @@ def upload_documents_batch(
     return payload
 
 
-@router.post("/clean", summary="Step 2: Clean and normalize extracted text")
+@router.post(
+    "/clean",
+    summary="Step 2: Clean and normalize extracted text",
+    description="Usage: Primarily for testing/debug in stepwise flow. Purpose: normalize extracted text before chunking.",
+)
+# Detailed function explanation:
+# - Purpose: `step_clean` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def step_clean(
     payload: CleanTextRequest,
     _: User = Depends(get_current_user),
@@ -685,7 +812,19 @@ def step_clean(
     }
 
 
-@router.post("/chunk", summary="Step 3: Chunk cleaned text with metadata")
+@router.post(
+    "/chunk",
+    summary="Step 3: Chunk cleaned text with metadata",
+    description=(
+        "Usage: Primarily for testing/debug in stepwise flow. "
+        "Purpose: chunk cleaned text, persist chunks, and index vectors."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `step_chunk` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def step_chunk(
     payload: ChunkTextRequest,
     db: Session = Depends(get_db),
@@ -724,7 +863,7 @@ def step_chunk(
         "message": "Chunking completed, stored in MySQL, and indexed in Chroma.",
         "source": "text",
         "document_id": document.id,
-        "chunking_strategy": "fixed",
+        "chunking_strategy": "semantic",
         "chunk_count": len(saved_chunks),
         "vector_indexed": True,
         "vector_collection": index_result.get("collection"),

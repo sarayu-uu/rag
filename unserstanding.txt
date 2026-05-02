@@ -1,0 +1,200 @@
+RAG System End-to-End Flow (Understanding Guide)
+================================================
+
+Goal
+- Explain the complete runtime flow of this repository in the order a real request moves through the system.
+
+1) Data Model Foundation (MySQL Tables)
+----------------------------------------
+Primary model file:
+- backend/app/models/mysql.py
+
+Core tables and why they exist:
+- roles
+  - Stores RBAC roles: Admin, Manager, Analyst, Viewer, Guest.
+- users
+  - Stores user identity, hashed password, role mapping, active state.
+- documents
+  - One row per uploaded document/source URL with metadata and owner.
+- document_chunks
+  - Stores chunked text units created from each document.
+- permissions
+  - Document-level access controls (can_read, can_query, can_edit) by user/role.
+- chat_sessions
+  - Tracks user chat sessions and token budget/usage status.
+- chat_messages
+  - Stores each user/assistant/system message per session.
+- metrics_usage
+  - Stores telemetry: request counts, tokens, cost estimates, latency, errors.
+
+Startup behavior:
+- init_db() creates missing tables and seeds baseline roles.
+- ensure_schema_updates() applies lightweight schema additions if needed.
+
+2) Authentication and Access Control
+------------------------------------
+Auth files:
+- backend/app/auth/security.py
+- backend/app/routes/auth.py
+
+Flow:
+1. Signup (`POST /auth/signup`) creates inactive user + OTP.
+2. OTP verification (`POST /auth/verify-otp`) activates user.
+3. Login (`POST /auth/login`) issues access + refresh JWT.
+4. Protected APIs use `get_current_user` dependency.
+5. Frontend auto-refreshes access token with `POST /auth/refresh`.
+
+Permission filtering:
+- backend/app/auth/permissions.py
+- Used by document/retrieval/chat routes to enforce per-user/per-role document access.
+
+3) Uploading + Ingestion (Load -> Clean -> Chunk)
+--------------------------------------------------
+Main route files:
+- backend/app/routes/documents.py (main production upload endpoint)
+- backend/app/routes/ingestion_steps.py (stepwise/debug endpoints)
+
+Ingestion worker files:
+- backend/app/ingestion/loaders.py
+- backend/app/ingestion/router.py
+- backend/app/ingestion/validators.py
+- backend/app/ingestion/text_cleaning.py
+- backend/app/ingestion/chunking.py
+- backend/app/ingestion/document_record.py
+
+Detailed flow:
+1. Client uploads file or URL (`/documents/upload` or `/ingestion/upload`).
+2. Validate input type/size/content.
+3. Detect source type and extract raw text + metadata.
+4. Clean/normalize text.
+5. Chunk cleaned text with overlap and metadata.
+6. Save document row and chunk rows to MySQL.
+7. Mark document status processed.
+
+4) Storing in Vector DB (Chroma)
+---------------------------------
+Files:
+- backend/app/retrieval/embeddings.py
+- backend/app/retrieval/chroma_store.py
+- backend/app/retrieval/service.py
+
+Flow:
+1. For saved chunks, generate embeddings.
+2. Convert each chunk to vector record with metadata.
+3. Upsert records into Chroma collection.
+4. Health check available via vector store helpers and `/health?include_vector_store=true`.
+
+Important note:
+- LLM does not consume embeddings directly.
+- LLM consumes retrieved chunk text (grounding context).
+
+5) Retrieval According to Query
+-------------------------------
+Route:
+- backend/app/routes/retrieval.py (`POST /retrieval/search`)
+
+Core service:
+- backend/app/retrieval/service.py
+
+Query-time flow:
+1. Embed user query.
+2. Run semantic vector search in Chroma.
+3. Run keyword-style retrieval over chunk text.
+4. Merge/rerank results (hybrid retrieval path in chat flow).
+5. Return top relevant chunk payloads with metadata.
+
+6) What Next After Retrieval: RAG Answer Generation
+----------------------------------------------------
+Files:
+- backend/app/services/rag_chat.py
+- backend/app/prompts/rag_system.jinja2
+- backend/app/prompts/rag_user.jinja2
+- backend/app/services/chatgroq_bot.py
+
+Flow:
+1. Build prompt from:
+  - user question
+  - selected retrieved chunks
+  - prompt templates (system + user)
+2. Send prompt to model client.
+3. Receive answer.
+4. Return answer with source references and retrieval metadata.
+
+7) Chat Session Memory + History
+--------------------------------
+Files:
+- backend/app/routes/chat.py
+- backend/app/services/chat_history.py
+
+Flow:
+1. `/chat/query` creates or reuses session.
+2. User message is saved.
+3. Memory context is assembled from recent history.
+4. Retrieval + generation run.
+5. Assistant message saved.
+6. Session/message APIs allow list/view/delete.
+
+8) RBAC During Retrieval and Chat
+---------------------------------
+Files:
+- backend/app/auth/permissions.py
+- backend/app/routes/chat.py
+- backend/app/routes/retrieval.py
+- backend/app/routes/documents.py
+
+Flow:
+- Before retrieval/query, system computes accessible document IDs.
+- Retrieval/search only runs over allowed documents.
+- Document CRUD and admin actions are role-gated.
+
+9) Telemetry, Metrics, and Observability
+-----------------------------------------
+Files:
+- backend/app/telemetry/middleware.py
+- backend/app/telemetry/service.py
+- backend/app/routes/metrics.py
+
+Flow:
+1. Middleware captures request status and latency.
+2. Reads telemetry headers from chat/retrieval responses.
+3. Writes rows into metrics_usage table.
+4. `/metrics` returns aggregate stats.
+5. `/telemetry` returns richer admin/manager summary.
+
+10) Frontend Wiring (How UI Uses Backend)
+------------------------------------------
+Core files:
+- frontend/src/lib/api.js
+- frontend/src/context/AuthContext.jsx
+- frontend/src/App.jsx
+
+Pages:
+- Login/Signup/VerifyOtp -> auth endpoints.
+- Documents page -> upload/list/delete documents.
+- Chat page -> sessions/messages/query + source panel.
+- Admin pages -> users/roles/permissions.
+- Telemetry page -> metrics/telemetry endpoints.
+
+API client behavior:
+- Attaches bearer token automatically.
+- If 401, attempts refresh token and retries.
+
+11) Complete User Journey in One Line
+-------------------------------------
+Signup/Login -> Upload doc -> Ingest + chunk + MySQL save -> Embed + Chroma index -> Ask query -> Retrieve relevant chunks (permission-aware) -> Build prompt -> LLM answer with citations -> Save chat history -> Capture telemetry.
+
+12) Best Learning Path Through Code
+-----------------------------------
+Read in this order:
+1. backend/app/main.py
+2. backend/app/models/mysql.py
+3. backend/app/routes/documents.py
+4. backend/app/ingestion/*
+5. backend/app/retrieval/service.py + chroma_store.py
+6. backend/app/routes/chat.py
+7. backend/app/services/rag_chat.py
+8. backend/app/services/chat_history.py
+9. backend/app/auth/security.py + permissions.py
+10. frontend/src/lib/api.js + frontend/src/pages/ChatPage.jsx
+
+This gives the fastest understanding of the full system lifecycle.

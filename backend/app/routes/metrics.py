@@ -21,13 +21,27 @@ from app.telemetry.service import build_telemetry_summary
 router = APIRouter(tags=["metrics"])
 
 
+# Detailed function explanation:
+# - Purpose: `_to_float` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _to_float(value: Decimal | int | None) -> float:
     if value is None:
         return 0.0
     return float(value)
 
 
-@router.get("/metrics", summary="Phase 12: Aggregate metrics and telemetry counters")
+@router.get(
+    "/metrics",
+    summary="Phase 12: Aggregate metrics and telemetry counters",
+    description="Usage: Used by frontend dashboards. Purpose: returns aggregated token, request, error, latency, and cost metrics.",
+)
+# Detailed function explanation:
+# - Purpose: `get_metrics` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_metrics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -85,7 +99,16 @@ def get_metrics(
     }
 
 
-@router.get("/telemetry", summary="Phase 10: Telemetry and observability summary from metrics_usage")
+@router.get(
+    "/telemetry",
+    summary="Phase 10: Telemetry and observability summary from metrics_usage",
+    description="Usage: Used by frontend telemetry page (admin/manager only). Purpose: detailed operational telemetry over a time window.",
+)
+# Detailed function explanation:
+# - Purpose: `get_telemetry` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_telemetry(
     hours: int = Query(default=24, ge=1, le=24 * 30),
     db: Session = Depends(get_db),

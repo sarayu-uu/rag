@@ -30,7 +30,19 @@ class RetrievalSearchRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=20, description="Maximum number of similar chunks to return.")
 
 
-@router.post("/search", summary="Phase 4: Search indexed chunks in the vector store")
+@router.post(
+    "/search",
+    summary="Phase 4: Search indexed chunks in the vector store",
+    description=(
+        "Usage: Used in retrieval debugging and can support advanced UI features. "
+        "Purpose: returns top matching indexed chunks for a query."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `search_indexed_chunks` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def search_indexed_chunks(
     payload: RetrievalSearchRequest,
     response: Response,
@@ -40,10 +52,13 @@ def search_indexed_chunks(
     retrieval_start = perf_counter()
     try:
         ensure_vector_store_ready()
+        allowed_document_ids = accessible_document_ids(db, current_user, permission_field="can_query")
+        if allowed_document_ids is None:
+            allowed_document_ids = list(db.scalars(select(Document.id)).all())
         matches = search_chunk_text(
             payload.query,
             limit=payload.limit,
-            document_ids=accessible_document_ids(db, current_user, permission_field="can_query"),
+            document_ids=allowed_document_ids,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -60,7 +75,19 @@ def search_indexed_chunks(
     }
 
 
-@router.post("/reindex/{document_id}", summary="Phase 4: Reindex one document into the vector store")
+@router.post(
+    "/reindex/{document_id}",
+    summary="Phase 4: Reindex one document into the vector store",
+    description=(
+        "Usage: Admin/maintenance endpoint (not part of normal chat UX). "
+        "Purpose: rebuild vector index entries for one document from stored chunks."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `reindex_document` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def reindex_document(
     document_id: int,
     db: Session = Depends(get_db),

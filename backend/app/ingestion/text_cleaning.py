@@ -33,7 +33,9 @@ _REPLACEMENTS = {
     "◦": " ",
 }
 
-
+# Removes noisy formatting artifacts from extracted text
+# (extra symbols, repeated separators, broken spacing patterns)
+# so the content is cleaner before chunking/retrieval.
 def remove_noisy_formatting(text: str) -> str:
     """
     Remove common formatting noise while keeping readable content intact.
@@ -48,20 +50,28 @@ def remove_noisy_formatting(text: str) -> str:
     cleaned = _ZERO_WIDTH_PATTERN.sub("", cleaned)
     cleaned = _LONG_SEPARATOR_PATTERN.sub("\n", cleaned)
 
+    # Build a clean list of meaningful lines from the normalized text.
     filtered_lines: list[str] = []
     for raw_line in cleaned.split("\n"):
+        # Remove leading bullet markers and trim whitespace.
         line = _BULLET_PREFIX_PATTERN.sub("", raw_line).strip()
+        # Skip lines that are only decorative separators/noise.
         if _DECORATIVE_LINE_PATTERN.match(line):
             continue
+        # Replace non-text symbols, then collapse repeated spaces.
         line = _NON_TEXT_SYMBOL_PATTERN.sub(" ", line)
         line = _MULTI_SPACE_PATTERN.sub(" ", line).strip()
+        # Ignore empty lines after cleanup.
         if not line:
             continue
         filtered_lines.append(line)
 
+    # Reassemble cleaned lines into final text for downstream chunking.
     return "\n".join(filtered_lines)
 
 
+# Cleans whitespace in extracted text by removing extra spaces/blank lines
+# and normalizing line breaks, so the text is consistent before chunking.
 def normalize_whitespace(text: str) -> str:
     """
     Normalize whitespace while preserving paragraph boundaries.
@@ -80,6 +90,9 @@ def normalize_whitespace(text: str) -> str:
     return normalized.strip()
 
 
+# Main text-cleaning pipeline for extracted content.
+# Runs whitespace normalization + noisy-format cleanup,
+# and returns cleaner text ready for validation and chunking.
 def clean_text(text: str) -> str:
     """
     Full text-cleaning pipeline for extracted raw text.
@@ -87,6 +100,9 @@ def clean_text(text: str) -> str:
     return normalize_whitespace(remove_noisy_formatting(text))
 
 
+# Cleans a list of text sections (for example page-wise content),
+# applies text cleanup to each section, and keeps section metadata intact
+# so downstream chunking/citation logic still knows source boundaries.
 def clean_sections(
     sections: list[dict[str, Any]],
     *,

@@ -1,3 +1,8 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
 import ChatTranscript from "../components/chat/ChatTranscript";
@@ -5,6 +10,13 @@ import SessionList from "../components/chat/SessionList";
 import SourcePanel from "../components/chat/SourcePanel";
 import { deleteChatSession, getChatMessages, getChatSessions, queryChat } from "../lib/api";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `ChatPage` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function ChatPage() {
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
@@ -25,6 +37,13 @@ export default function ChatPage() {
     Boolean(activeSession?.token_limit) &&
     Number(activeSession?.tokens_used_total ?? 0) >= Number(activeSession?.token_limit ?? 0);
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `loadSessions` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function loadSessions() {
     setLoadingSessions(true);
     try {
@@ -41,6 +60,13 @@ export default function ChatPage() {
     loadSessions();
   }, []);
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `openSession` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function openSession(sessionId, options = {}) {
     setLoadingMessages(true);
     setError("");
@@ -58,6 +84,13 @@ export default function ChatPage() {
     }
   }
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `startNewChat` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   function startNewChat() {
     setActiveSessionId(null);
     setMessages([]);
@@ -66,6 +99,13 @@ export default function ChatPage() {
     setError("");
   }
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleDeleteSession` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleDeleteSession(session) {
     const confirmed = window.confirm(`Delete chat session "${session.title || `Session ${session.session_id}`}"?`);
     if (!confirmed) {
@@ -91,6 +131,13 @@ export default function ChatPage() {
     }
   }
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleAsk` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleAsk(event) {
     event.preventDefault();
     if (!question.trim() || isActiveSessionAtLimit) {

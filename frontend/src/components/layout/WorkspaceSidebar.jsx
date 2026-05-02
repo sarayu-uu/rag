@@ -1,3 +1,8 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 const TAB_LABELS = {
   documents: "View Documents",
   ingestion: "Ingestions",
@@ -7,6 +12,13 @@ const TAB_LABELS = {
   analytics: "Analytics",
 };
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `Icon` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function Icon({ children }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="sidebar-icon">
@@ -55,6 +67,13 @@ const TAB_ICONS = {
   ),
 };
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `getTabsLayout` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 function getTabsLayout(tabs, collapsed) {
   if (collapsed) return "layout-stack";
   const tabSet = new Set(tabs);
@@ -81,6 +100,13 @@ function getTabsLayout(tabs, collapsed) {
   return "layout-stack";
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `WorkspaceSidebar` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function WorkspaceSidebar({
   user,
   collapsed,

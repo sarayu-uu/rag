@@ -22,10 +22,20 @@ from app.config.settings import (
 )
 
 
+# Detailed function explanation:
+# - Purpose: `is_smtp_configured` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def is_smtp_configured() -> bool:
     return all([SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM_EMAIL])
 
 
+# Detailed function explanation:
+# - Purpose: `send_signup_otp_email` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def send_signup_otp_email(recipient_email: str, otp: str, expiry_minutes: int) -> None:
     if not is_smtp_configured():
         raise HTTPException(

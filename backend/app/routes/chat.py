@@ -10,11 +10,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.permissions import accessible_document_ids
 from app.auth.security import get_current_user
-from app.models.mysql import ChatSession, MessageRole, User, get_db
+from app.models.mysql import ChatSession, Document, MessageRole, User, get_db
 from app.retrieval.service import ensure_vector_store_ready
 from app.services.chat_history import (
     append_chat_message,
@@ -59,7 +60,19 @@ class ChatQueryRequest(BaseModel):
     )
 
 
-@router.post("/answer-from-matches", summary="Phase 5: Generate a grounded answer from provided matches")
+@router.post(
+    "/answer-from-matches",
+    summary="Phase 5: Generate a grounded answer from provided matches",
+    description=(
+        "Usage: Primarily for testing/manual experiments. "
+        "Purpose: generate an answer from caller-supplied retrieval matches without running retrieval."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `generate_answer_from_matches` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def generate_answer_from_matches(
     payload: AnswerFromMatchesRequest,
     _: User = Depends(get_current_user),
@@ -81,7 +94,19 @@ def generate_answer_from_matches(
     }
 
 
-@router.post("/query", summary="Phase 6: Search across all indexed documents and generate a grounded answer")
+@router.post(
+    "/query",
+    summary="Phase 6: Search across all indexed documents and generate a grounded answer",
+    description=(
+        "Usage: Main frontend chat endpoint. "
+        "Purpose: retrieve relevant chunks, generate grounded answer, and persist chat history."
+    ),
+)
+# Detailed function explanation:
+# - Purpose: `chat_query` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def chat_query(
     payload: ChatQueryRequest,
     response: Response,
@@ -90,6 +115,10 @@ def chat_query(
 ) -> dict[str, Any]:
     try:
         ensure_vector_store_ready()
+        allowed_document_ids = accessible_document_ids(db, current_user, permission_field="can_query")
+        if allowed_document_ids is None:
+            # Even for admin-like global access, constrain retrieval to existing DB documents only.
+            allowed_document_ids = list(db.scalars(select(Document.id)).all())
         session, created = get_or_create_chat_session(
             db,
             question=payload.question,
@@ -112,7 +141,7 @@ def chat_query(
             question_for_usage,
             limit=payload.limit,
             memory_context=memory_context,
-            document_ids=accessible_document_ids(db, current_user, permission_field="can_query"),
+            document_ids=allowed_document_ids,
         )
         token_usage = result.get("token_usage") or {}
         model_token_input = int(token_usage.get("input_tokens", 0) or 0)
@@ -172,7 +201,16 @@ def chat_query(
     }
 
 
-@router.get("/sessions", summary="Phase 9: List persistent chat sessions")
+@router.get(
+    "/sessions",
+    summary="Phase 9: List persistent chat sessions",
+    description="Usage: Used by frontend chat sidebar. Purpose: lists the current user's saved chat sessions.",
+)
+# Detailed function explanation:
+# - Purpose: `get_sessions` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -184,7 +222,16 @@ def get_sessions(
     }
 
 
-@router.get("/sessions/{session_id}/messages", summary="Phase 9: Get all messages for a session")
+@router.get(
+    "/sessions/{session_id}/messages",
+    summary="Phase 9: Get all messages for a session",
+    description="Usage: Used by frontend transcript view. Purpose: returns all messages for one user-owned session.",
+)
+# Detailed function explanation:
+# - Purpose: `get_session_messages` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_session_messages(
     session_id: int,
     db: Session = Depends(get_db),
@@ -201,7 +248,16 @@ def get_session_messages(
     }
 
 
-@router.delete("/sessions/{session_id}", summary="Phase 9: Delete a chat session")
+@router.delete(
+    "/sessions/{session_id}",
+    summary="Phase 9: Delete a chat session",
+    description="Usage: Used by frontend chat sidebar actions. Purpose: deletes one user-owned chat session.",
+)
+# Detailed function explanation:
+# - Purpose: `delete_session` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def delete_session(
     session_id: int,
     db: Session = Depends(get_db),
