@@ -12,6 +12,11 @@ from sqlalchemy.orm import Session
 from app.models.mysql import Document, Permission, RoleName, User
 
 
+# Detailed function explanation:
+# - Purpose: `_has_global_document_access` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _has_global_document_access(user: User, *, permission_field: str) -> bool:
     role_name = user.role.name if user.role else None
     if role_name == RoleName.ADMIN:
@@ -21,6 +26,11 @@ def _has_global_document_access(user: User, *, permission_field: str) -> bool:
     return False
 
 
+# Detailed function explanation:
+# - Purpose: `document_access_filter` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def document_access_filter(user: User, *, permission_field: str):
     if _has_global_document_access(user, permission_field=permission_field):
         return None
@@ -41,6 +51,11 @@ def document_access_filter(user: User, *, permission_field: str):
     )
 
 
+# Detailed function explanation:
+# - Purpose: `accessible_document_ids` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def accessible_document_ids(db: Session, user: User, *, permission_field: str) -> list[int] | None:
     if _has_global_document_access(user, permission_field=permission_field):
         return None

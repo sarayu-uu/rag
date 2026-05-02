@@ -1,12 +1,13 @@
 """
 File purpose:
 - Phase 3 chunking utilities for ingestion.
-- Produces simple fixed-size chunks with metadata, ready for embeddings/retrieval.
+- Produces semantic-style chunks with metadata, ready for embeddings/retrieval.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -17,6 +18,9 @@ class ChunkingConfig:
     chunk_overlap: int = 150
 
 
+# Validates chunking settings before splitting text.
+# Ensures chunk size is positive, overlap is non-negative,
+# and overlap is smaller than chunk size.
 def _validate_config(config: ChunkingConfig) -> None:
     if config.chunk_size <= 0:
         raise ValueError("chunk_size must be > 0.")
@@ -26,6 +30,10 @@ def _validate_config(config: ChunkingConfig) -> None:
         raise ValueError("chunk_overlap must be smaller than chunk_size.")
 
 
+
+# Creates one standardized chunk dictionary with all metadata fields
+# (document id, chunk index, source/page info, owner, permissions, and content)
+# so it can be stored consistently in DB/vector indexing flow.
 def _make_chunk_record(
     *,
     document_id: int | None,
@@ -48,22 +56,60 @@ def _make_chunk_record(
     }
 
 
-def _split_fixed_text(text: str, config: ChunkingConfig) -> list[str]:
+# Split text into sentence-like units so chunks follow natural boundaries.
+_SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
+
+
+def _split_sentences(text: str) -> list[str]:
+    parts = [part.strip() for part in _SENTENCE_SPLIT_PATTERN.split(text) if part.strip()]
+    return parts if parts else ([text.strip()] if text.strip() else [])
+
+
+# Builds semantic-ish chunks by grouping related sentence units until chunk_size.
+# Overlap is applied as trailing characters from previous chunk for continuity.
+def _split_semantic_text(text: str, config: ChunkingConfig) -> list[str]:
     _validate_config(config)
     text_value = (text or "").strip()
     if not text_value:
         return []
 
+    semantic_units: list[str] = []
+    for paragraph in [part.strip() for part in text_value.split("\n\n") if part.strip()]:
+        semantic_units.extend(_split_sentences(paragraph))
+
     chunks: list[str] = []
-    step = config.chunk_size - config.chunk_overlap
-    for start in range(0, len(text_value), step):
-        chunk = text_value[start : start + config.chunk_size].strip()
-        if chunk:
-            chunks.append(chunk)
+    current = ""
 
-    return chunks
+    for unit in semantic_units:
+        if not current:
+            current = unit
+            continue
+
+        candidate = f"{current} {unit}".strip()
+        if len(candidate) <= config.chunk_size:
+            current = candidate
+            continue
+
+        chunks.append(current)
+        overlap_tail = current[-config.chunk_overlap :].strip() if config.chunk_overlap > 0 else ""
+        current = f"{overlap_tail} {unit}".strip() if overlap_tail else unit
+
+        if len(current) > config.chunk_size:
+            # Fallback for very large single sentence/unit.
+            chunks.append(current[: config.chunk_size].strip())
+            current = current[max(config.chunk_size - config.chunk_overlap, 1) :].strip()
+
+    if current:
+        chunks.append(current.strip())
+
+    return [chunk for chunk in chunks if chunk]
 
 
+# Detailed function explanation:
+# - Purpose: `chunk_text` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def chunk_text(
     text: str,
     *,
@@ -74,10 +120,10 @@ def chunk_text(
     config: ChunkingConfig | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Chunk plain text into fixed-size overlap-aware chunks with metadata.
+    Chunk plain text into semantic-style overlap-aware chunks with metadata.
     """
     cfg = config or ChunkingConfig()
-    chunks = _split_fixed_text(text, cfg)
+    chunks = _split_semantic_text(text, cfg)
     output: list[dict[str, Any]] = []
 
     for idx, chunk in enumerate(chunks):
@@ -100,6 +146,11 @@ def chunk_text(
     return output
 
 
+# Detailed function explanation:
+# - Purpose: `chunk_sections` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def chunk_sections(
     sections: list[dict[str, Any]],
     *,
@@ -125,7 +176,7 @@ def chunk_sections(
             continue
 
         page_number = section.get(page_key)
-        section_chunks = _split_fixed_text(section_text, cfg)
+        section_chunks = _split_semantic_text(section_text, cfg)
 
         for chunk in section_chunks:
             chunk_text_value = chunk.strip()

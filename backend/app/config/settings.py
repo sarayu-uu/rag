@@ -1,7 +1,8 @@
 """
 File purpose:
-- Holds backend path-based configuration values.
-- Provides a single place to define upload/storage directories.
+- Central configuration module for backend runtime behavior.
+- Loads environment variables once and exposes typed config constants to the app.
+- Keeps sensitive/environment-specific settings out of route/service code.
 """
 
 from pathlib import Path
@@ -49,7 +50,16 @@ SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "RAG Workspace")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes", "on"}
 
 
+# Detailed function explanation:
+# - Purpose: `_build_database_url` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _build_database_url() -> str:
+    # Build one SQLAlchemy-ready database URL from env vars.
+    # Preference order:
+    # 1) explicit DATABASE_URL
+    # 2) compose from MYSQL_* parts
     """
     Resolve the database connection string.
 
@@ -74,12 +84,25 @@ def _build_database_url() -> str:
     )
 
 
+# Detailed function explanation:
+# - Purpose: `_build_vector_store_path` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def _build_vector_store_path() -> str:
+    # Resolve vector DB directory to an absolute normalized path so all modules
+    # read/write the same location regardless of current working directory.
     raw_path = os.getenv(
         "VECTOR_STORE_PATH",
         os.getenv("APP_MILVUS_URI", str(BASE_DIR / "backend" / "chroma_db")),
     ).strip()
-    return str(Path(raw_path).expanduser().resolve())
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        # Treat relative vector paths as repo-root relative (stable across launch cwd).
+        path = (BASE_DIR / path).resolve()
+    else:
+        path = path.resolve()
+    return str(path)
 
 
 DATABASE_URL = _build_database_url()

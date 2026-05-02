@@ -17,6 +17,11 @@ from sqlalchemy.orm import Session
 from app.models.mysql import Document, DocumentChunk, DocumentStatus
 
 
+# Detailed function explanation:
+# - Purpose: `build_document_record_payload` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def build_document_record_payload(
     *,
     source: str,
@@ -45,6 +50,11 @@ def build_document_record_payload(
     }
 
 
+# Detailed function explanation:
+# - Purpose: `save_document_record` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def save_document_record(db: Session, payload: dict[str, Any]) -> Document:
     """
     DB-ready helper for when DB integration is enabled.
@@ -73,6 +83,11 @@ def save_document_record(db: Session, payload: dict[str, Any]) -> Document:
     return document
 
 
+# Detailed function explanation:
+# - Purpose: `replace_document_chunks` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def replace_document_chunks(
     db: Session,
     *,

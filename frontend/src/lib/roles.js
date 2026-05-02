@@ -1,3 +1,8 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 export const ROLE_KEYS = {
   ADMIN: "Admin",
   MANAGER: "Manager",
@@ -39,14 +44,35 @@ export const ROLE_DEFINITIONS = {
   },
 };
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `getRoleDefinition` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export function getRoleDefinition(role) {
   return ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS[ROLE_KEYS.GUEST];
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `isManagementRole` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export function isManagementRole(role) {
   return role === ROLE_KEYS.ADMIN || role === ROLE_KEYS.MANAGER;
 }
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `canUpload` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export function canUpload(role) {
   return role === ROLE_KEYS.ADMIN || role === ROLE_KEYS.MANAGER || role === ROLE_KEYS.ANALYST;
 }

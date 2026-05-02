@@ -1,8 +1,27 @@
+/**
+ * File overview: This frontend module defines part of the React UI flow for auth, ingestion, chat, dashboards, or admin operations.
+ * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
+ */
+
 import { useState } from "react";
 
+/**
+ * Detailed function explanation:
+ * - Purpose: `UploadCard` handles a specific UI/data responsibility in this file.
+ * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+ * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+ *   predictable UI output or data transformations used by the next step.
+ */
 export default function UploadCard({ canUpload, onUpload, busy }) {
   const [selectedFile, setSelectedFile] = useState(null);
 
+  /**
+   * Detailed function explanation:
+   * - Purpose: `handleSubmit` handles a specific UI/data responsibility in this file.
+   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
+   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
+   *   predictable UI output or data transformations used by the next step.
+   */
   async function handleSubmit(event) {
     event.preventDefault();
     if (!selectedFile || !canUpload) {

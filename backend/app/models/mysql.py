@@ -303,14 +303,29 @@ class MetricUsage(Base):
     session: Mapped["ChatSession"] = relationship(back_populates="metrics")
 
 
+# Detailed function explanation:
+# - Purpose: `init_db` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def init_db() -> None:
+    # Called during app startup.
+    # Ensures schema exists, applies small backward-compatible updates,
+    # and seeds mandatory reference data (roles).
     """Create all tables and seed baseline reference data."""
     Base.metadata.create_all(bind=engine)
     ensure_schema_updates()
     seed_roles()
 
 
+# Detailed function explanation:
+# - Purpose: `ensure_schema_updates` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def ensure_schema_updates() -> None:
+    # Lightweight migration helper for local/dev databases.
+    # Prevents runtime failures when code expects new columns in older DBs.
     """Apply lightweight schema updates for existing local databases."""
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
@@ -328,7 +343,14 @@ def ensure_schema_updates() -> None:
             )
 
 
+# Detailed function explanation:
+# - Purpose: `get_db` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_db() -> Generator[Session, None, None]:
+    # FastAPI dependency provider.
+    # Opens one DB session per request and guarantees cleanup afterwards.
     """Yield a request-scoped SQLAlchemy session."""
     db = SessionLocal()
     try:
@@ -337,13 +359,27 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+# Detailed function explanation:
+# - Purpose: `check_db_connection` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def check_db_connection() -> None:
+    # Used by health endpoint/startup diagnostics to verify DB reachability.
+    # Raises immediately if connection is broken/misconfigured.
     """Raise if the configured database is unreachable."""
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
 
 
+# Detailed function explanation:
+# - Purpose: `seed_roles` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def seed_roles() -> None:
+    # Ensures required RBAC roles exist in every environment.
+    # Safe to run repeatedly because it inserts only missing roles.
     """Ensure the baseline RBAC roles exist for future phases."""
     with SessionLocal() as db:
         existing_roles = set(db.scalars(select(Role.name)).all())
@@ -360,7 +396,14 @@ def seed_roles() -> None:
         db.commit()
 
 
+# Detailed function explanation:
+# - Purpose: `get_or_create_default_ingestion_user` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_or_create_default_ingestion_user(db: Session) -> User:
+    # Fallback uploader identity for ingestion flows that run without
+    # a logged-in user context (legacy/dev utility paths).
     """Return a fallback uploader user for ingestion flows before auth exists."""
     user = db.scalar(select(User).where(User.email == DEFAULT_INGESTION_EMAIL))
     if user is not None:

@@ -27,11 +27,13 @@ SUPPORTED_EXTENSIONS = {
     ".txt",
 }
 
-
+# Returns the file extension (including the dot) from the given filename
+# and converts it to lowercase for consistent type checks.
 def get_extension(filename: str) -> str:
     return Path(filename).suffix.lower()
 
-
+# Checks whether the uploaded file extension is allowed.
+# Returns the extension if valid; otherwise raises an error.
 def validate_file_type(filename: str) -> str:
     ext = get_extension(filename)
     if ext not in SUPPORTED_EXTENSIONS:
@@ -44,7 +46,9 @@ def validate_file_type(filename: str) -> str:
         )
     return ext
 
-
+# Calculates uploaded file size and checks limits.
+# Raises an error if the file is empty or larger than allowed size.
+# Returns the file size in bytes when valid.
 def validate_file_size(upload: UploadFile) -> int:
     upload.file.seek(0, 2)
     size = upload.file.tell()
@@ -62,6 +66,9 @@ def validate_file_size(upload: UploadFile) -> int:
     return size
 
 
+# Checks whether extracted text is actually usable.
+# Raises an error if content is empty, too short, or invalid after extraction/cleaning.
+# Returns the cleaned/validated content (or allows flow to continue) when valid.
 def validate_extracted_content(text: str) -> None:
     if not text.strip():
         raise HTTPException(
