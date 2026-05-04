@@ -10,13 +10,7 @@ from functools import lru_cache
 from typing import Any
 
 from app.config.settings import VECTOR_COLLECTION, VECTOR_SEARCH_LIMIT, VECTOR_STORE_PATH
-
-
-# Detailed function explanation:
-# - Purpose: `_get_chroma_symbols` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets chroma symbols.
 def _get_chroma_symbols():
     try:
         import chromadb
@@ -28,43 +22,21 @@ def _get_chroma_symbols():
 
 
 @lru_cache(maxsize=1)
-# Detailed function explanation:
-# - Purpose: `get_chroma_client` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets chroma client.
 def get_chroma_client():
     chromadb = _get_chroma_symbols()
     return chromadb.PersistentClient(path=VECTOR_STORE_PATH)
-
-
-# Detailed function explanation:
-# - Purpose: `get_collection` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets collection.
 def get_collection():
     client = get_chroma_client()
     return client.get_or_create_collection(
         name=VECTOR_COLLECTION,
         metadata={"hnsw:space": "cosine"},
     )
-
-
-# Detailed function explanation:
-# - Purpose: `ensure_collection` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Ensures collection is ready.
 def ensure_collection() -> None:
     get_collection()
-
-
-# Detailed function explanation:
-# - Purpose: `vector_store_health` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Checks whether the vector store is available.
 def vector_store_health() -> dict[str, str]:
     try:
         collection = get_collection()
@@ -72,22 +44,10 @@ def vector_store_health() -> dict[str, str]:
     except Exception as exc:
         return {"status": "disconnected", "collection": VECTOR_COLLECTION, "detail": str(exc)}
     return {"status": "connected", "collection": VECTOR_COLLECTION}
-
-
-# Detailed function explanation:
-# - Purpose: `delete_document_vectors` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Deletes document vectors.
 def delete_document_vectors(document_id: int) -> None:
     get_collection().delete(where={"document_id": int(document_id)})
-
-
-# Detailed function explanation:
-# - Purpose: `upsert_chunk_vectors` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Creates or updates chunk vectors in Chroma.
 def upsert_chunk_vectors(records: list[dict[str, Any]]) -> None:
     if not records:
         return
@@ -120,13 +80,7 @@ def upsert_chunk_vectors(records: list[dict[str, Any]]) -> None:
         embeddings=embeddings,
         metadatas=metadatas,
     )
-
-
-# Detailed function explanation:
-# - Purpose: `search_vectors` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Searches vectors.
 def search_vectors(
     query_vector: list[float],
     *,
@@ -188,3 +142,5 @@ def search_vectors(
             }
         )
     return normalized_hits
+
+

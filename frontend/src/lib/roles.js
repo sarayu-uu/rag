@@ -43,36 +43,17 @@ export const ROLE_DEFINITIONS = {
     navigation: ["dashboard", "chat", "profile"],
   },
 };
-
-/**
- * Detailed function explanation:
- * - Purpose: `getRoleDefinition` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets role definition. */
 export function getRoleDefinition(role) {
   return ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS[ROLE_KEYS.GUEST];
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `isManagementRole` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Checks whether management role. */
 export function isManagementRole(role) {
   return role === ROLE_KEYS.ADMIN || role === ROLE_KEYS.MANAGER;
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `canUpload` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Checks whether upload. */
 export function canUpload(role) {
   return role === ROLE_KEYS.ADMIN || role === ROLE_KEYS.MANAGER || role === ROLE_KEYS.ANALYST;
 }
+
+

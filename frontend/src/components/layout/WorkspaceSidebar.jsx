@@ -11,14 +11,7 @@ const TAB_LABELS = {
   permissions: "Permissions",
   analytics: "Analytics",
 };
-
-/**
- * Detailed function explanation:
- * - Purpose: `Icon` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders a small UI icon. */
 function Icon({ children }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="sidebar-icon">
@@ -66,14 +59,7 @@ const TAB_ICONS = {
     </Icon>
   ),
 };
-
-/**
- * Detailed function explanation:
- * - Purpose: `getTabsLayout` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets tabs layout. */
 function getTabsLayout(tabs, collapsed) {
   if (collapsed) return "layout-stack";
   const tabSet = new Set(tabs);
@@ -99,14 +85,7 @@ function getTabsLayout(tabs, collapsed) {
 
   return "layout-stack";
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `WorkspaceSidebar` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the workspace navigation sidebar. */
 export default function WorkspaceSidebar({
   user,
   collapsed,
@@ -214,3 +193,6 @@ export default function WorkspaceSidebar({
     </aside>
   );
 }
+
+
+

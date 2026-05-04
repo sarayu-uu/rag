@@ -6,14 +6,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-
-/**
- * Detailed function explanation:
- * - Purpose: `EyeIcon` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the password visibility icon. */
 function EyeIcon({ open }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="password-visibility-icon">
@@ -28,14 +21,7 @@ function EyeIcon({ open }) {
     </svg>
   );
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `LoginPage` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the login page. */
 export default function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -44,14 +30,7 @@ export default function LoginPage() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleSubmit` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Submits the current form action. */
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
@@ -134,3 +113,6 @@ export default function LoginPage() {
     </div>
   );
 }
+
+
+

@@ -18,31 +18,13 @@ CHAT_TOKEN_LIMIT = 10000
 RECENT_MESSAGE_LIMIT = 6
 OLDER_SUMMARY_LIMIT = 1200
 SESSION_TITLE_WORDS = 3
-
-
-# Detailed function explanation:
-# - Purpose: `first_words` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Returns the first few words from a message.
 def first_words(text: str, count: int = SESSION_TITLE_WORDS) -> str:
     return " ".join(text.strip().split()[:count])
-
-
-# Detailed function explanation:
-# - Purpose: `is_session_at_limit` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Checks whether session at limit.
 def is_session_at_limit(session: ChatSession) -> bool:
     return int(session.tokens_used_total or 0) >= int(session.token_limit or CHAT_TOKEN_LIMIT)
-
-
-# Detailed function explanation:
-# - Purpose: `create_chat_session` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Creates chat session.
 def create_chat_session(db: Session, *, question: str, user_id: int) -> ChatSession:
     session = ChatSession(
         user_id=user_id,
@@ -56,26 +38,14 @@ def create_chat_session(db: Session, *, question: str, user_id: int) -> ChatSess
     db.add(session)
     db.flush()
     return session
-
-
-# Detailed function explanation:
-# - Purpose: `get_chat_session` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets chat session.
 def get_chat_session(db: Session, session_id: int, *, user_id: int) -> ChatSession | None:
     return db.scalar(
         select(ChatSession)
         .options(selectinload(ChatSession.messages))
         .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
     )
-
-
-# Detailed function explanation:
-# - Purpose: `get_or_create_chat_session` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets or create chat session.
 def get_or_create_chat_session(
     db: Session,
     *,
@@ -102,13 +72,7 @@ def get_or_create_chat_session(
         session.ended_at = None
     db.flush()
     return session, False
-
-
-# Detailed function explanation:
-# - Purpose: `append_chat_message` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Appends chat message.
 def append_chat_message(
     db: Session,
     *,
@@ -130,13 +94,7 @@ def append_chat_message(
     db.flush()
     refresh_session_totals(db, session)
     return message
-
-
-# Detailed function explanation:
-# - Purpose: `refresh_session_totals` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Refreshes session totals.
 def refresh_session_totals(db: Session, session: ChatSession) -> None:
     session.tokens_used_total = int(
         db.scalar(
@@ -155,13 +113,7 @@ def refresh_session_totals(db: Session, session: ChatSession) -> None:
         session.status = SessionStatus.ACTIVE
         session.ended_at = None
     db.flush()
-
-
-# Detailed function explanation:
-# - Purpose: `build_memory_context` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds memory context for the next step.
 def build_memory_context(session: ChatSession) -> dict[str, Any]:
     messages = sorted(session.messages, key=lambda item: (item.created_at, item.id))
     recent_messages = messages[-RECENT_MESSAGE_LIMIT:]
@@ -187,13 +139,7 @@ def build_memory_context(session: ChatSession) -> dict[str, Any]:
         "older_summary": "\n".join(summary_lines),
         "message_count": len(messages),
     }
-
-
-# Detailed function explanation:
-# - Purpose: `serialize_session` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Converts session into a response-friendly format.
 def serialize_session(session: ChatSession) -> dict[str, Any]:
     return {
         "session_id": session.id,
@@ -205,13 +151,7 @@ def serialize_session(session: ChatSession) -> dict[str, Any]:
         "started_at": session.started_at.isoformat(),
         "ended_at": session.ended_at.isoformat() if session.ended_at else None,
     }
-
-
-# Detailed function explanation:
-# - Purpose: `list_chat_sessions` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Lists chat sessions.
 def list_chat_sessions(db: Session, *, user_id: int) -> list[dict[str, Any]]:
     sessions = db.scalars(
         select(ChatSession)
@@ -219,13 +159,7 @@ def list_chat_sessions(db: Session, *, user_id: int) -> list[dict[str, Any]]:
         .order_by(ChatSession.started_at.desc(), ChatSession.id.desc())
     ).all()
     return [serialize_session(session) for session in sessions]
-
-
-# Detailed function explanation:
-# - Purpose: `get_session_messages_payload` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets session messages payload.
 def get_session_messages_payload(db: Session, session_id: int, *, user_id: int) -> dict[str, Any] | None:
     session = get_chat_session(db, session_id, user_id=user_id)
     if session is None:
@@ -247,3 +181,5 @@ def get_session_messages_payload(db: Session, session_id: int, *, user_id: int) 
             for message in ordered_messages
         ],
     }
+
+

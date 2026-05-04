@@ -24,13 +24,7 @@ OVERFETCH_MULTIPLIER = 3
 SEMANTIC_WEIGHT = 0.65
 KEYWORD_WEIGHT = 0.35
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
-
-
-# Detailed function explanation:
-# - Purpose: `_extract_token_usage` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Pulls token usage details from the model response.
 def _extract_token_usage(response: Any) -> dict[str, int]:
     usage = getattr(response, "usage_metadata", None) or {}
     if not isinstance(usage, dict):
@@ -48,11 +42,7 @@ def _extract_token_usage(response: Any) -> dict[str, int]:
 
 
 @lru_cache(maxsize=1)
-# Detailed function explanation:
-# - Purpose: `_get_prompt_environment` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets prompt environment.
 def _get_prompt_environment() -> Environment:
     return Environment(
         loader=FileSystemLoader(str(PROMPTS_DIR)),
@@ -61,23 +51,11 @@ def _get_prompt_environment() -> Environment:
         trim_blocks=True,
         lstrip_blocks=True,
     )
-
-
-# Detailed function explanation:
-# - Purpose: `_render_prompt` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Renders a prompt template with the current values.
 def _render_prompt(template_name: str, **context: Any) -> str:
     template = _get_prompt_environment().get_template(template_name)
     return template.render(**context).strip()
-
-
-# Detailed function explanation:
-# - Purpose: `_strip_inline_sources` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Removes inline source labels from the answer text.
 def _strip_inline_sources(answer: str) -> str:
     cleaned = (answer or "").strip()
     if not cleaned:
@@ -90,13 +68,7 @@ def _strip_inline_sources(answer: str) -> str:
         cleaned,
     ).strip()
     return cleaned
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_memory_context` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Normalizes memory context into a consistent format.
 def _normalize_memory_context(memory_context: dict[str, Any] | None) -> dict[str, Any]:
     context = memory_context or {}
     older_summary = context.get("older_summary", "")
@@ -107,13 +79,7 @@ def _normalize_memory_context(memory_context: dict[str, Any] | None) -> dict[str
         "recent_messages": recent_messages if isinstance(recent_messages, list) else [],
         "message_count": int(message_count or 0),
     }
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_match` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Normalizes match into a consistent format.
 def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
     return {
         "id": str(match.get("id", index)),
@@ -126,13 +92,7 @@ def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
         "retrieval_method": str(match.get("retrieval_method", "semantic")),
         "rerank_score": float(match.get("rerank_score", 0.0)),
     }
-
-
-# Detailed function explanation:
-# - Purpose: `_build_sources` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds sources for the next step.
 def _build_sources(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     sources: list[dict[str, Any]] = []
     for index, raw_match in enumerate(matches, start=1):
@@ -151,13 +111,7 @@ def _build_sources(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return sources
-
-
-# Detailed function explanation:
-# - Purpose: `_summarize_documents` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds a short summary of the retrieved documents.
 def _summarize_documents(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[int, dict[str, Any]] = {}
     for match in matches:
@@ -187,13 +141,7 @@ def _summarize_documents(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for summary in sorted(grouped.values(), key=lambda item: (item["best_score"], item["document_id"]))
     ]
-
-
-# Detailed function explanation:
-# - Purpose: `_select_multi_document_context` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Chooses context chunks across multiple documents.
 def _select_multi_document_context(matches: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
     grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for match in matches:
@@ -234,13 +182,7 @@ def _select_multi_document_context(matches: list[dict[str, Any]], *, limit: int)
             break
 
     return selected
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_semantic_scores` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Normalizes semantic scores into a consistent format.
 def _normalize_semantic_scores(matches: list[dict[str, Any]]) -> dict[str, float]:
     if not matches:
         return {}
@@ -250,13 +192,7 @@ def _normalize_semantic_scores(matches: list[dict[str, Any]]) -> dict[str, float
         # Lower Chroma distance is better, so invert into a similarity-like score.
         normalized[str(match["id"])] = max(0.0, 1.0 - (float(match["score"]) / max_distance))
     return normalized
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_keyword_scores` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Normalizes keyword scores into a consistent format.
 def _normalize_keyword_scores(matches: list[dict[str, Any]]) -> dict[str, float]:
     if not matches:
         return {}
@@ -265,13 +201,7 @@ def _normalize_keyword_scores(matches: list[dict[str, Any]]) -> dict[str, float]
     for match in matches:
         normalized[str(match["id"])] = float(match["score"]) / max_score
     return normalized
-
-
-# Detailed function explanation:
-# - Purpose: `_rerank_hybrid_matches` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Reranks semantic and keyword matches together.
 def _rerank_hybrid_matches(
     semantic_matches: list[dict[str, Any]],
     keyword_matches: list[dict[str, Any]],
@@ -325,13 +255,7 @@ def _rerank_hybrid_matches(
         )
     )
     return reranked
-
-
-# Detailed function explanation:
-# - Purpose: `answer_question_from_matches` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Answers question from matches.
 def answer_question_from_matches(
     question: str,
     matches: list[dict[str, Any]],
@@ -380,13 +304,7 @@ def answer_question_from_matches(
         "model_latency_ms": model_latency_ms,
         "token_usage": token_usage,
     }
-
-
-# Detailed function explanation:
-# - Purpose: `answer_question_with_retrieval` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Answers question with retrieval.
 def answer_question_with_retrieval(
     question: str,
     *,
@@ -426,3 +344,5 @@ def answer_question_with_retrieval(
     }
     result["retrieval_latency_ms"] = retrieval_latency_ms
     return result
+
+

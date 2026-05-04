@@ -18,13 +18,7 @@ from app.telemetry.service import (
 )
 
 logger = logging.getLogger("app.telemetry")
-
-
-# Detailed function explanation:
-# - Purpose: `_resolve_user_id_from_auth_header` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Reads the user id from the auth header when possible.
 def _resolve_user_id_from_auth_header(request: Request) -> int | None:
     raw_auth = request.headers.get("authorization", "").strip()
     if not raw_auth.lower().startswith("bearer "):
@@ -46,13 +40,7 @@ def _resolve_user_id_from_auth_header(request: Request) -> int | None:
         return int(payload.get("sub"))
     except (TypeError, ValueError):
         return None
-
-
-# Detailed function explanation:
-# - Purpose: `telemetry_middleware` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Logs telemetry for each HTTP request.
 async def telemetry_middleware(request: Request, call_next):
     started = now_perf()
     path = request.url.path
@@ -87,3 +75,5 @@ async def telemetry_middleware(request: Request, call_next):
 
         log_level = logging.ERROR if status_code >= 400 else logging.INFO
         logger.log(log_level, "request=%s %s status=%s latency_ms=%s", request.method, path, status_code, latency_ms)
+
+

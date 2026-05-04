@@ -93,41 +93,19 @@ class EvalResponse(BaseModel):
 
 class _FastEmbedLangchainEmbeddings:
     """Small adapter so RAGAS can reuse the repo's FastEmbed embeddings."""
-
-    # Detailed function explanation:
-    # - Purpose: `embed_documents` handles one focused step of this module's workflow.
-    # - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-    # - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-    #   (or raises a clear exception) so downstream code can continue reliably.
+    # Embeds documents.
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         return embed_texts(texts)
-
-    # Detailed function explanation:
-    # - Purpose: `embed_query` handles one focused step of this module's workflow.
-    # - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-    # - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-    #   (or raises a clear exception) so downstream code can continue reliably.
+    # Embeds query.
     def embed_query(self, text: str) -> list[float]:
         return embed_query(text)
-
-
-# Detailed function explanation:
-# - Purpose: `_safe_float` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Safely converts a value to a float.
 def _safe_float(value: Any) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
-
-
-# Detailed function explanation:
-# - Purpose: `_extract_ragas_metrics` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Pulls RAGAS metric values from the evaluation result.
 def _extract_ragas_metrics(result: Any) -> dict[str, float]:
     if hasattr(result, "to_pandas"):
         frame = result.to_pandas()
@@ -145,13 +123,7 @@ def _extract_ragas_metrics(result: Any) -> dict[str, float]:
             if str(key) in RAGAS_METRIC_KEYS
         }
     return {}
-
-
-# Detailed function explanation:
-# - Purpose: `_run_ragas` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Runs ragas.
 def _run_ragas(
     *,
     question: str,
@@ -241,11 +213,7 @@ def _run_ragas(
         "2) RAGAS quality metrics (when dependencies and model settings are available)."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `evaluate_rag` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Runs the RAG evaluation flow.
 def evaluate_rag(
     payload: EvalRequest,
     db: Session = Depends(get_db),
@@ -332,3 +300,5 @@ def evaluate_rag(
             "context_recall": "How well retrieved context covers the reference/ground-truth answer.",
         },
     )
+
+

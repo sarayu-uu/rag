@@ -2,7 +2,9 @@
 File purpose:
 - Exposes step-by-step ingestion endpoints for debugging and demo in Swagger.
 - Steps: load (raw extraction), clean (text cleaning), chunk (chunk generation).
-- Also provides a one-step upload flow that stores chunks in MySQL and Chroma.
+- Also provides upload endpoints that can store chunks in MySQL and Chroma.
+- In normal app flow, the frontend mainly uses `/documents/upload`, while this file
+  is most useful for debugging or running ingestion step by step.
 """
 
 from __future__ import annotations
@@ -62,11 +64,9 @@ class ChunkTextRequest(BaseModel):
     chunk_overlap: int = Field(default=100, description="Character overlap between adjacent chunks.")
 
 
-# Detailed function explanation:
-# - Purpose: `_normalize_url_input` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Cleans the incoming URL value from form data.
+# It turns placeholder values like "string" or empty input into `None`.
+# Normalizes url input into a consistent format.
 def _normalize_url_input(url: str | None) -> str | None:
     if url is None:
         return None
@@ -76,11 +76,9 @@ def _normalize_url_input(url: str | None) -> str | None:
     return value
 
 
-# Detailed function explanation:
-# - Purpose: `_save_upload` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Saves the uploaded file into the uploads folder.
+# It also validates file size and returns the saved path, size, and safe filename.
+# Saves upload.
 def _save_upload(file: UploadFile, ext: str) -> tuple[Path, int, str]:
     file_size = validate_file_size(file)
     safe_name = f"{Path(file.filename).stem}_{uuid4().hex[:8]}{ext}"
@@ -92,11 +90,8 @@ def _save_upload(file: UploadFile, ext: str) -> tuple[Path, int, str]:
     return file_path, file_size, safe_name
 
 
-# Detailed function explanation:
-# - Purpose: `_single_input_guard` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Makes sure the request contains exactly one source:
+# either a file or a URL, but not both.
 def _single_input_guard(file: UploadFile | None, url: str | None) -> None:
     if (file is None and not url) or (file is not None and url):
         raise HTTPException(
@@ -105,11 +100,9 @@ def _single_input_guard(file: UploadFile | None, url: str | None) -> None:
         )
 
 
-# Detailed function explanation:
-# - Purpose: `_validate_chunk_form_inputs` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Validates chunk size and overlap from form input.
+# Returns a `ChunkingConfig` object if the values are valid.
+# Validates chunk form inputs before the next step.
 def _validate_chunk_form_inputs(chunk_size: int, chunk_overlap: int) -> ChunkingConfig:
     if chunk_size <= 0:
         raise HTTPException(status_code=400, detail="chunk_size must be > 0.")
@@ -120,11 +113,9 @@ def _validate_chunk_form_inputs(chunk_size: int, chunk_overlap: int) -> Chunking
     return ChunkingConfig(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
 
-# Detailed function explanation:
-# - Purpose: `_parse_permissions_tags` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Reads `permissions_tags` from form input.
+# Accepts JSON arrays or simple comma-separated text and returns a clean list of tags.
+# Parses permissions tags.
 def _parse_permissions_tags(raw_value: str | None) -> list[str]:
     if not raw_value:
         return []
@@ -148,11 +139,7 @@ def _parse_permissions_tags(raw_value: str | None) -> list[str]:
     return [tag.strip() for tag in parsed if tag.strip()]
 
 
-# Detailed function explanation:
-# - Purpose: `_deserialize_permissions_tags` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Converts stored permissions JSON text back into a Python list.
 def _deserialize_permissions_tags(raw_value: str | None) -> list[str]:
     if not raw_value:
         return []
@@ -165,11 +152,9 @@ def _deserialize_permissions_tags(raw_value: str | None) -> list[str]:
     return [tag for tag in parsed if isinstance(tag, str)]
 
 
-# Detailed function explanation:
-# - Purpose: `_chunk_cleaned_text` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Chunks one cleaned text string into chunk records.
+# This path is used for non-PDF inputs or whenever page-wise chunking is not needed.
+# Chunks cleaned text.
 def _chunk_cleaned_text(
     cleaned_text: str,
     *,
@@ -180,6 +165,7 @@ def _chunk_cleaned_text(
     config: ChunkingConfig,
 ) -> list[dict[str, Any]]:
     validate_extracted_content(cleaned_text)
+    #here chunk text is called
     return chunk_text(
         cleaned_text,
         document_id=document_id,
@@ -190,11 +176,9 @@ def _chunk_cleaned_text(
     )
 
 
-# Detailed function explanation:
-# - Purpose: `_chunk_pdf_document` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Chunks a PDF document page by page.
+# It reloads PDF sections, cleans each page, and preserves page numbers in chunk metadata.
+# Chunks pdf document.
 def _chunk_pdf_document(
     document: Document,
     *,
@@ -224,11 +208,9 @@ def _chunk_pdf_document(
     )
 
 
-# Detailed function explanation:
-# - Purpose: `_build_chunks_for_document` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Chooses the right chunking path for a document.
+# PDFs use page-aware chunking, while other sources use normal text chunking.
+# Builds chunks for document for the next step.
 def _build_chunks_for_document(
     document: Document,
     *,
@@ -238,6 +220,7 @@ def _build_chunks_for_document(
     permissions_tags: list[str],
     config: ChunkingConfig,
 ) -> list[dict[str, Any]]:
+    # if pdf then one chunking
     if document.file_type.lower() == "pdf" and Path(document.storage_path).exists():
         return _chunk_pdf_document(
             document,
@@ -246,7 +229,7 @@ def _build_chunks_for_document(
             permissions_tags=permissions_tags,
             config=config,
         )
-
+    # if not pdf then other chunking
     return _chunk_cleaned_text(
         cleaned_text,
         document_id=document.id,
@@ -257,11 +240,9 @@ def _build_chunks_for_document(
     )
 
 
-# Detailed function explanation:
-# - Purpose: `_get_document_or_404` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads one document from MySQL and raises `404` if it does not exist
+# or the current user is not allowed to access it.
+# Gets document or 404.
 def _get_document_or_404(db: Session, document_id: int, *, current_user: User | None = None) -> Document:
     document = db.scalar(select(Document).where(Document.id == document_id))
     if document is None:
@@ -271,11 +252,9 @@ def _get_document_or_404(db: Session, document_id: int, *, current_user: User | 
     return document
 
 
-# Detailed function explanation:
-# - Purpose: `_serialize_chunks` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Converts saved chunk ORM objects into plain dictionaries
+# so they can be returned cleanly in API responses.
+# Converts chunks into a response-friendly format.
 def _serialize_chunks(chunks: list[Any]) -> list[dict[str, Any]]:
     return [
         {
@@ -293,13 +272,11 @@ def _serialize_chunks(chunks: list[Any]) -> list[dict[str, Any]]:
     ]
 
 
-# Detailed function explanation:
-# - Purpose: `_index_saved_chunks` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Sends saved chunks to the vector DB for indexing.
+# If indexing fails, it raises a clear API error explaining the document was saved in MySQL first.
 def _index_saved_chunks(document_id: int, saved_chunks: list[Any]) -> dict[str, Any]:
     try:
+        #saves the embedings in the vector db
         return sync_document_chunks_to_vector_store(saved_chunks)
     except Exception as exc:
         raise HTTPException(
@@ -315,15 +292,12 @@ def _index_saved_chunks(document_id: int, saved_chunks: list[Any]) -> dict[str, 
     "/load",
     summary="Step 1: Load input and extract raw text",
     description=(
-        "Usage: Primarily for step-by-step testing/debug in Swagger. "
-        "Purpose: extract raw text and create initial document record."
+        "Debug endpoint `/ingestion/load`. "
+        "Use it to extract raw text and create an initial document record without running the full pipeline."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `step_load` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Step 1 of the debug ingestion flow.
+# It loads a file or URL, extracts raw text, and creates the first document row in MySQL.
 def step_load(
     file: UploadFile | None = File(default=None),
     url: str | None = Form(default=None),
@@ -421,11 +395,9 @@ def step_load(
     }
 
 
-# Detailed function explanation:
-# - Purpose: `_build_upload_response` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds the final API response for upload endpoints.
+# It packages document info, previews, chunk counts, and optional vector-index details.
+# Builds upload response for the next step.
 def _build_upload_response(
     *,
     document: Document,
@@ -453,11 +425,9 @@ def _build_upload_response(
     }
 
 
-# Detailed function explanation:
-# - Purpose: `_run_upload_pipeline` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Runs the full ingestion pipeline in one place:
+# load -> validate -> clean -> chunk -> save in MySQL -> optionally index in Chroma.
+# Runs upload pipeline.
 def _run_upload_pipeline(
     *,
     file: UploadFile | None = File(default=None),
@@ -469,9 +439,11 @@ def _run_upload_pipeline(
     index_in_vector_store: bool,
     upload_user: User | None = None,
 ) -> dict[str, Any]:
-    url = _normalize_url_input(url)
-    _single_input_guard(file, url)
+    url = _normalize_url_input(url) #cleans the url
+    _single_input_guard(file, url) #cheks if user gave only one source
+    #below forms chunkconfig
     config = _validate_chunk_form_inputs(chunk_size, chunk_overlap)
+    #if any perimissions are given
     parsed_permissions_tags = _parse_permissions_tags(permissions_tags)
     effective_upload_user = upload_user if upload_user is not None else get_or_create_default_ingestion_user(db)
 
@@ -545,16 +517,18 @@ def _run_upload_pipeline(
     if not file or not file.filename:
         raise HTTPException(status_code=400, detail="No file received.")
 
-    ext = validate_file_type(file.filename)
+    ext = validate_file_type(file.filename) #validating file type
+    #check file size and save uplaod in uploads folder
     file_path, file_size, safe_name = _save_upload(file, ext)
     try:
+        # this is used to find the extenstion to extract text
         result = load_file_with_metadata(file_path, document_name=Path(file.filename).name)
         raw_text = result["text"]
         metadata = result["metadata"]
         validate_extracted_content(raw_text)
         cleaned_text = clean_text(raw_text)
         validate_extracted_content(cleaned_text)
-
+        # build document to save it in mysql
         document_payload = build_document_record_payload(
             source="file",
             storage_path=str(file_path),
@@ -564,7 +538,9 @@ def _run_upload_pipeline(
             document_name=metadata["document_name"],
             page_numbers=metadata["page_numbers"],
         )
+        #saving it in mysql
         document = save_document_record(db, document_payload)
+        # used for chunking
         chunks = _build_chunks_for_document(
             document,
             cleaned_text=cleaned_text,
@@ -572,7 +548,8 @@ def _run_upload_pipeline(
             owner_user_id=document.upload_user_id,
             permissions_tags=parsed_permissions_tags,
             config=config,
-        )
+        ) # from this the chunks will be outputted
+        # chunks saved in mysql in document_chunks
         saved_chunks = replace_document_chunks(db, document_id=document.id, chunks=chunks)
         document.status = DocumentStatus.PROCESSED
         db.commit()
@@ -594,7 +571,10 @@ def _run_upload_pipeline(
     }
 
     if index_in_vector_store:
+        # to convert chunks into embeddings and store them using 
+        # upsert_chunk_vectors
         index_result = _index_saved_chunks(document.id, saved_chunks)
+        # create response so store in doucment_chunks
         response = _build_upload_response(
             document=document,
             source="file",
@@ -624,15 +604,13 @@ def _run_upload_pipeline(
     "/uploadtochunk",
     summary="Step 1 to 3: Load, clean, and chunk in one request",
     description=(
-        "Usage: Testing/debug flow for ingestion stages. "
-        "Purpose: run load+clean+chunk and persist in MySQL without vector indexing."
+        "Debug endpoint `/ingestion/uploadtochunk`. "
+        "Runs load + clean + chunk and saves chunks in MySQL without vector indexing."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `upload_to_chunk` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Debug upload flow that stops before vector indexing.
+# Useful when you want to inspect cleaned text and stored chunks first.
+# Uploads to chunk.
 def upload_to_chunk(
     response: Response,
     file: UploadFile | None = File(default=None),
@@ -663,15 +641,13 @@ def upload_to_chunk(
     "/upload",
     summary="Default upload: store document, chunks, and vectors automatically",
     description=(
-        "Usage: Alternate production ingestion endpoint; documents route also uses same pipeline. "
-        "Purpose: full ingest with chunk persistence and vector indexing."
+        "Usable endpoint `/ingestion/upload`. "
+        "Runs the full ingestion flow and stores chunks in MySQL and Chroma."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `upload_document` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Full ingestion endpoint in this route file.
+# It saves the document, creates chunks, and indexes them in the vector DB.
+# Uploads document.
 def upload_document(
     response: Response,
     file: UploadFile | None = File(default=None),
@@ -702,15 +678,13 @@ def upload_document(
     "/upload-batch",
     summary="Batch upload: store multiple documents, chunks, and vectors",
     description=(
-        "Usage: Batch ingestion utility for bulk upload operations/testing. "
-        "Purpose: ingest and index multiple files in one request."
+        "Usable endpoint `/ingestion/upload-batch`. "
+        "Processes multiple uploaded files in one request and indexes each successful document."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `upload_documents_batch` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Batch version of the upload pipeline.
+# It loops through many files and returns which ones succeeded or failed.
+# Uploads documents batch.
 def upload_documents_batch(
     response: Response,
     files: list[UploadFile] = File(default_factory=list),
@@ -789,13 +763,10 @@ def upload_documents_batch(
 @router.post(
     "/clean",
     summary="Step 2: Clean and normalize extracted text",
-    description="Usage: Primarily for testing/debug in stepwise flow. Purpose: normalize extracted text before chunking.",
+    description="Debug endpoint `/ingestion/clean`. Cleans extracted text before chunking.",
 )
-# Detailed function explanation:
-# - Purpose: `step_clean` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Step 2 of the debug ingestion flow.
+# It cleans extracted text and returns the cleaned result.
 def step_clean(
     payload: CleanTextRequest,
     _: User = Depends(get_current_user),
@@ -816,15 +787,12 @@ def step_clean(
     "/chunk",
     summary="Step 3: Chunk cleaned text with metadata",
     description=(
-        "Usage: Primarily for testing/debug in stepwise flow. "
-        "Purpose: chunk cleaned text, persist chunks, and index vectors."
+        "Debug endpoint `/ingestion/chunk`. "
+        "Chunks cleaned text, saves chunk rows, and indexes them in the vector DB."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `step_chunk` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Step 3 of the debug ingestion flow.
+# It takes cleaned text, turns it into chunks, saves them, and indexes them.
 def step_chunk(
     payload: ChunkTextRequest,
     db: Session = Depends(get_db),
@@ -870,3 +838,4 @@ def step_chunk(
         "cleaned_text_preview": payload.text[:1200],
         "chunks": _serialize_chunks(saved_chunks),
     }
+

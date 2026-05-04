@@ -21,13 +21,7 @@ from app.retrieval.chroma_store import (
     upsert_chunk_vectors,
     vector_store_health,
 )
-
-
-# Detailed function explanation:
-# - Purpose: `_chunk_to_vector_record` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Chunks to vector record.
 def _chunk_to_vector_record(chunk: DocumentChunk, vector: list[float]) -> dict[str, Any]:
     return {
         "id": str(chunk.id),
@@ -42,27 +36,16 @@ def _chunk_to_vector_record(chunk: DocumentChunk, vector: list[float]) -> dict[s
         },
         "embedding": vector,
     }
-
-
-# Detailed function explanation:
-# - Purpose: `ensure_vector_store_ready` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Ensures vector store ready is ready.
 def ensure_vector_store_ready() -> None:
     ensure_collection()
-
-
-# Detailed function explanation:
-# - Purpose: `sync_document_chunks_to_vector_store` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Syncs document chunks to vector store.
 def sync_document_chunks_to_vector_store(chunks: list[DocumentChunk]) -> dict[str, Any]:
     if not chunks:
         raise ValueError("At least one chunk is required for indexing.")
 
     document_id = int(chunks[0].document_id)
+    #embeding happens here
     vectors = embed_texts([chunk.content for chunk in chunks])
     records = [_chunk_to_vector_record(chunk, vector) for chunk, vector in zip(chunks, vectors, strict=True)]
 
@@ -74,22 +57,10 @@ def sync_document_chunks_to_vector_store(chunks: list[DocumentChunk]) -> dict[st
         "indexed_chunk_count": len(records),
         "collection": vector_store_health().get("collection", ""),
     }
-
-
-# Detailed function explanation:
-# - Purpose: `clear_document_vectors` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Clears document vectors.
 def clear_document_vectors(document_id: int) -> None:
     delete_document_vectors(document_id)
-
-
-# Detailed function explanation:
-# - Purpose: `search_chunk_text` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Searches chunk text.
 def search_chunk_text(
     query: str,
     *,
@@ -132,23 +103,11 @@ def search_chunk_text(
         )
 
     return normalized_results
-
-
-# Detailed function explanation:
-# - Purpose: `_tokenize_query` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Splits the query into searchable tokens.
 def _tokenize_query(text: str) -> list[str]:
     tokens = re.findall(r"[A-Za-z0-9]+", text.lower())
     return [token for token in tokens if len(token) >= 3]
-
-
-# Detailed function explanation:
-# - Purpose: `keyword_search_chunk_text` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Runs keyword search across stored chunk text.
 def keyword_search_chunk_text(
     query: str,
     *,
@@ -217,3 +176,5 @@ def keyword_search_chunk_text(
 
     ranked.sort(key=lambda item: (-item["score"], item["document_id"], item["chunk_index"]))
     return ranked[:limit]
+
+

@@ -4,14 +4,7 @@
  */
 
 import EmptyState from "../common/EmptyState";
-
-/**
- * Detailed function explanation:
- * - Purpose: `getUsagePercent` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets usage percent. */
 function getUsagePercent(session) {
   const used = Number(session?.tokens_used_total ?? 0);
   const limit = Number(session?.token_limit ?? 0);
@@ -20,14 +13,7 @@ function getUsagePercent(session) {
   }
   return Math.min(100, Math.max(0, Math.round((used / limit) * 100)));
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `SessionList` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the list of chat sessions. */
 export default function SessionList({ sessions, activeSessionId, loading, deletingSessionId, onDelete, onSelect, onNewChat }) {
   return (
     <section className="feature-card session-list-card">
@@ -92,3 +78,6 @@ export default function SessionList({ sessions, activeSessionId, loading, deleti
     </section>
   );
 }
+
+
+

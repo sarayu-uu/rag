@@ -10,14 +10,7 @@ import UploadCard from "../components/documents/UploadCard";
 import { useAuth } from "../context/AuthContext";
 import { deleteDocument, getDocuments, uploadDocument } from "../lib/api";
 import { canUpload, isManagementRole } from "../lib/roles";
-
-/**
- * Detailed function explanation:
- * - Purpose: `DocumentsPage` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the documents management page. */
 export default function DocumentsPage() {
   const { user } = useAuth();
   const showUploaderColumn = isManagementRole(user?.role);
@@ -25,14 +18,7 @@ export default function DocumentsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `loadDocuments` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Loads documents. */
   async function loadDocuments() {
     try {
       const response = await getDocuments();
@@ -45,14 +31,7 @@ export default function DocumentsPage() {
   useEffect(() => {
     loadDocuments();
   }, []);
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleUpload` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Uploads the selected file or form data. */
   async function handleUpload(file) {
     setBusy(true);
     setError("");
@@ -67,14 +46,7 @@ export default function DocumentsPage() {
       setBusy(false);
     }
   }
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleDelete` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Deletes the selected document and refreshes the list. */
   async function handleDelete(documentId) {
     setBusy(true);
     setError("");
@@ -156,3 +128,6 @@ export default function DocumentsPage() {
     </div>
   );
 }
+
+
+

@@ -17,14 +17,7 @@ const INITIAL_FORM = {
   can_query: true,
   can_edit: false,
 };
-
-/**
- * Detailed function explanation:
- * - Purpose: `AdminPermissionsPage` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the document permissions admin page. */
 export default function AdminPermissionsPage() {
   const [documents, setDocuments] = useState([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState("");
@@ -32,14 +25,7 @@ export default function AdminPermissionsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `loadDocuments` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Loads documents. */
   async function loadDocuments() {
     try {
       const response = await getDocuments();
@@ -56,14 +42,7 @@ export default function AdminPermissionsPage() {
   useEffect(() => {
     loadDocuments();
   }, []);
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleSubmit` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Submits the current form action. */
   async function handleSubmit(event) {
     event.preventDefault();
     if (!selectedDocumentId) {
@@ -197,3 +176,6 @@ export default function AdminPermissionsPage() {
     </div>
   );
 }
+
+
+

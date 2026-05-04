@@ -17,14 +17,7 @@ const NAV_ITEMS = [
   { key: "users", label: "Users", to: "/admin/users", accent: "admin" },
   { key: "permissions", label: "Permissions", to: "/admin/permissions", accent: "policy" },
 ];
-
-/**
- * Detailed function explanation:
- * - Purpose: `ShellIcon` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the sidebar shell icon. */
 function ShellIcon({ children }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="nav-icon">
@@ -75,14 +68,7 @@ const NAV_ICONS = {
     </ShellIcon>
   ),
 };
-
-/**
- * Detailed function explanation:
- * - Purpose: `AppShell` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the shared app layout shell. */
 export default function AppShell() {
   const { user, signOut } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -105,14 +91,7 @@ export default function AppShell() {
     return match?.label || "Workspace";
   }, [allowedItems, location.pathname]);
   const isChatRoute = location.pathname.startsWith("/chat");
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleLogout` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Logs the user out. */
   function handleLogout() {
     signOut();
     navigate("/login");
@@ -203,3 +182,6 @@ export default function AppShell() {
     </div>
   );
 }
+
+
+

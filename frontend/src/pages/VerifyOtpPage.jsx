@@ -6,14 +6,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { verifyOtp } from "../lib/api";
-
-/**
- * Detailed function explanation:
- * - Purpose: `VerifyOtpPage` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Verifies otp page. */
 export default function VerifyOtpPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -25,14 +18,7 @@ export default function VerifyOtpPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState("");
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleSubmit` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Submits the current form action. */
   async function handleSubmit(event) {
     event.preventDefault();
     setSubmitting(true);
@@ -112,3 +98,6 @@ export default function VerifyOtpPage() {
     </div>
   );
 }
+
+
+

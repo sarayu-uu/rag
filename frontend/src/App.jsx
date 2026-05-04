@@ -20,14 +20,7 @@ import ProfilePage from "./pages/ProfilePage";
 import SignupPage from "./pages/SignupPage";
 import TelemetryPage from "./pages/TelemetryPage";
 import VerifyOtpPage from "./pages/VerifyOtpPage";
-
-/**
- * Detailed function explanation:
- * - Purpose: `App` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the main frontend route tree. */
 export default function App() {
   return (
     <AuthProvider>
@@ -61,3 +54,5 @@ export default function App() {
     </AuthProvider>
   );
 }
+
+

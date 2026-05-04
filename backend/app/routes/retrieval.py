@@ -38,11 +38,7 @@ class RetrievalSearchRequest(BaseModel):
         "Purpose: returns top matching indexed chunks for a query."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `search_indexed_chunks` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Searches indexed chunks.
 def search_indexed_chunks(
     payload: RetrievalSearchRequest,
     response: Response,
@@ -83,11 +79,7 @@ def search_indexed_chunks(
         "Purpose: rebuild vector index entries for one document from stored chunks."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `reindex_document` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Reindexes one document into the vector store.
 def reindex_document(
     document_id: int,
     db: Session = Depends(get_db),
@@ -123,3 +115,5 @@ def reindex_document(
         "title": document.title,
         **result,
     }
+
+
