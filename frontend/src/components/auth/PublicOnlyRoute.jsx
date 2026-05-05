@@ -5,14 +5,7 @@
 
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-
-/**
- * Detailed function explanation:
- * - Purpose: `PublicOnlyRoute` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Blocks access for signed-in users on public pages. */
 export default function PublicOnlyRoute() {
   const { isAuthenticated, booting } = useAuth();
 
@@ -34,3 +27,5 @@ export default function PublicOnlyRoute() {
 
   return <Outlet />;
 }
+
+

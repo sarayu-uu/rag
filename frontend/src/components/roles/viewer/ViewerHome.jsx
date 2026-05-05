@@ -4,14 +4,7 @@
  */
 
 import { getRoleDefinition, ROLE_KEYS } from "../../../lib/roles";
-
-/**
- * Detailed function explanation:
- * - Purpose: `ViewerHome` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the viewer role home panel. */
 export default function ViewerHome() {
   const role = getRoleDefinition(ROLE_KEYS.VIEWER);
   return (
@@ -26,4 +19,7 @@ export default function ViewerHome() {
     </section>
   );
 }
+
+
+
 

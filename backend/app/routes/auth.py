@@ -51,22 +51,10 @@ class VerifyOtpRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str = Field(..., min_length=1)
-
-
-# Detailed function explanation:
-# - Purpose: `_generate_otp` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Generates a one-time passcode.
 def _generate_otp() -> str:
     return f"{random.randint(0, 999999):06d}"
-
-
-# Detailed function explanation:
-# - Purpose: `_serialize_user` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Converts user into a response-friendly format.
 def _serialize_user(user: User) -> dict[str, Any]:
     return {
         "id": user.id,
@@ -77,25 +65,13 @@ def _serialize_user(user: User) -> dict[str, Any]:
         "created_at": user.created_at.isoformat(),
         "updated_at": user.updated_at.isoformat(),
     }
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_email` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Normalizes email into a consistent format.
 def _normalize_email(value: str) -> str:
     email = value.strip().lower()
     if "@" not in email or "." not in email.split("@", 1)[-1]:
         raise HTTPException(status_code=400, detail="Provide a valid email address.")
     return email
-
-
-# Detailed function explanation:
-# - Purpose: `_get_signup_role` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets signup role.
 def _get_signup_role(db: Session) -> Role:
     role = db.scalar(select(Role).where(Role.name == DEFAULT_SIGNUP_ROLE))
     if role is None:
@@ -103,13 +79,7 @@ def _get_signup_role(db: Session) -> Role:
         db.add(role)
         db.flush()
     return role
-
-
-# Detailed function explanation:
-# - Purpose: `_get_user_by_email` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets user by email.
 def _get_user_by_email(db: Session, email: str) -> User | None:
     return db.scalar(
         select(User)
@@ -123,11 +93,7 @@ def _get_user_by_email(db: Session, email: str) -> User | None:
     summary="Phase 13: Register a user and send an OTP",
     description="Usage: Used by frontend signup flow. Purpose: creates a new inactive user and issues OTP verification.",
 )
-# Detailed function explanation:
-# - Purpose: `signup` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Signs up a new user.
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     normalized_email = _normalize_email(payload.email)
     existing_by_email = _get_user_by_email(db, normalized_email)
@@ -194,11 +160,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
     summary="Phase 13: Verify a signup OTP and activate the account",
     description="Usage: Used by frontend OTP page. Purpose: validates OTP and activates the user account.",
 )
-# Detailed function explanation:
-# - Purpose: `verify_otp` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Verifies otp.
 def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     email = _normalize_email(payload.email)
     record = OTP_STORE.get(email)
@@ -233,11 +195,7 @@ def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict
     summary="Phase 13: Authenticate a verified user and issue JWTs",
     description="Usage: Used by frontend login flow. Purpose: verifies credentials and returns access/refresh JWT tokens.",
 )
-# Detailed function explanation:
-# - Purpose: `login` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Logs the user in.
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     user = _get_user_by_email(db, _normalize_email(payload.email))
     if user is None or not verify_password(payload.password, user.password_hash):
@@ -259,11 +217,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any
     summary="Phase 13: Exchange a refresh token for a new access token",
     description="Usage: Used automatically by frontend API client on token expiry. Purpose: issues a fresh access token.",
 )
-# Detailed function explanation:
-# - Purpose: `refresh_token` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Refreshes token.
 def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     token_payload = decode_token(payload.refresh_token)
     if token_payload.get("type") != "refresh":
@@ -291,13 +245,11 @@ def refresh_token(payload: RefreshRequest, db: Session = Depends(get_db)) -> dic
     summary="Phase 13: Get the authenticated user profile",
     description="Usage: Used by frontend auth bootstrap/profile screens. Purpose: returns the authenticated user details.",
 )
-# Detailed function explanation:
-# - Purpose: `get_me` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets me.
 def get_me(current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     return {
         "status": "success",
         "user": _serialize_user(current_user),
     }
+
+

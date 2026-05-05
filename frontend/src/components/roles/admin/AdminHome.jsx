@@ -4,14 +4,7 @@
  */
 
 import { getRoleDefinition, ROLE_KEYS } from "../../../lib/roles";
-
-/**
- * Detailed function explanation:
- * - Purpose: `AdminHome` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the admin role home panel. */
 export default function AdminHome() {
   const role = getRoleDefinition(ROLE_KEYS.ADMIN);
   return (
@@ -26,4 +19,7 @@ export default function AdminHome() {
     </section>
   );
 }
+
+
+
 

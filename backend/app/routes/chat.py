@@ -60,6 +60,7 @@ class ChatQueryRequest(BaseModel):
     )
 
 
+#not used for development
 @router.post(
     "/answer-from-matches",
     summary="Phase 5: Generate a grounded answer from provided matches",
@@ -68,11 +69,7 @@ class ChatQueryRequest(BaseModel):
         "Purpose: generate an answer from caller-supplied retrieval matches without running retrieval."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `generate_answer_from_matches` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds an answer from already retrieved matches.
 def generate_answer_from_matches(
     payload: AnswerFromMatchesRequest,
     _: User = Depends(get_current_user),
@@ -94,6 +91,7 @@ def generate_answer_from_matches(
     }
 
 
+# this is being used 
 @router.post(
     "/query",
     summary="Phase 6: Search across all indexed documents and generate a grounded answer",
@@ -102,11 +100,7 @@ def generate_answer_from_matches(
         "Purpose: retrieve relevant chunks, generate grounded answer, and persist chat history."
     ),
 )
-# Detailed function explanation:
-# - Purpose: `chat_query` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Processes the main chat question request.
 def chat_query(
     payload: ChatQueryRequest,
     response: Response,
@@ -114,11 +108,14 @@ def chat_query(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     try:
+        #check if vector db is ready
         ensure_vector_store_ready()
+        # check what documents is allowed and take only those
         allowed_document_ids = accessible_document_ids(db, current_user, permission_field="can_query")
         if allowed_document_ids is None:
             # Even for admin-like global access, constrain retrieval to existing DB documents only.
             allowed_document_ids = list(db.scalars(select(Document.id)).all())
+        # this loads the session or creates a new one
         session, created = get_or_create_chat_session(
             db,
             question=payload.question,
@@ -127,8 +124,10 @@ def chat_query(
         )
         if is_session_at_limit(session):
             raise HTTPException(status_code=403, detail="100% chat used. Start a new chat to continue.")
+        # builds the context of recent messages
         memory_context = build_memory_context(session)
         question_for_usage = payload.question.strip()
+        #uploads the qustion to the chat message as a user question
         user_message = append_chat_message(
             db,
             session=session,
@@ -137,6 +136,7 @@ def chat_query(
             content=question_for_usage,
             token_count=0,
         )
+        #here the retvival process happens
         result = answer_question_with_retrieval(
             question_for_usage,
             limit=payload.limit,
@@ -206,11 +206,7 @@ def chat_query(
     summary="Phase 9: List persistent chat sessions",
     description="Usage: Used by frontend chat sidebar. Purpose: lists the current user's saved chat sessions.",
 )
-# Detailed function explanation:
-# - Purpose: `get_sessions` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets sessions.
 def get_sessions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -222,16 +218,13 @@ def get_sessions(
     }
 
 
+# get chat history
 @router.get(
     "/sessions/{session_id}/messages",
     summary="Phase 9: Get all messages for a session",
     description="Usage: Used by frontend transcript view. Purpose: returns all messages for one user-owned session.",
 )
-# Detailed function explanation:
-# - Purpose: `get_session_messages` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets session messages.
 def get_session_messages(
     session_id: int,
     db: Session = Depends(get_db),
@@ -247,17 +240,13 @@ def get_session_messages(
         **payload,
     }
 
-
+# delete a chat
 @router.delete(
     "/sessions/{session_id}",
     summary="Phase 9: Delete a chat session",
     description="Usage: Used by frontend chat sidebar actions. Purpose: deletes one user-owned chat session.",
 )
-# Detailed function explanation:
-# - Purpose: `delete_session` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Deletes session.
 def delete_session(
     session_id: int,
     db: Session = Depends(get_db),
@@ -275,3 +264,5 @@ def delete_session(
         "message": "Chat session deleted successfully.",
         "session_id": session_id,
     }
+
+

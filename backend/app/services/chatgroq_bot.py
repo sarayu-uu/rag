@@ -19,13 +19,7 @@ SYSTEM_PROMPT = (
     "You are a helpful assistant. Give clear, direct answers and ask for "
     "clarification only when necessary."
 )
-
-
-# Detailed function explanation:
-# - Purpose: `build_chat_model` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds chat model for the next step.
 def build_chat_model() -> ChatGroq:
     if not GROQ_API_KEY:
         raise ValueError(
@@ -37,13 +31,7 @@ def build_chat_model() -> ChatGroq:
         model=GROQ_MODEL,
         temperature=0.2,
     )
-
-
-# Detailed function explanation:
-# - Purpose: `run_cli_chatbot` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Runs cli chatbot.
 def run_cli_chatbot() -> None:
     chat_model = build_chat_model()
     history = [SystemMessage(content=SYSTEM_PROMPT)]
@@ -83,3 +71,5 @@ def run_cli_chatbot() -> None:
         answer = response.content if isinstance(response.content, str) else str(response.content)
         history.append(AIMessage(content=answer))
         print(f"Bot: {answer}\n")
+
+

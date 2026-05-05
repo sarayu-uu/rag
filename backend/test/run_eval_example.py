@@ -13,6 +13,9 @@ import json
 import requests
 
 
+# Runs the example script entry point.
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Call /test/evaluate and print JSON response.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000", help="Backend base URL.")
@@ -49,3 +52,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

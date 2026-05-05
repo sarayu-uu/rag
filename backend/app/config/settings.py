@@ -48,13 +48,7 @@ SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 SMTP_FROM_EMAIL = os.getenv("SMTP_FROM_EMAIL", SMTP_USERNAME).strip()
 SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "RAG Workspace")
 SMTP_USE_TLS = os.getenv("SMTP_USE_TLS", "true").strip().lower() in {"1", "true", "yes", "on"}
-
-
-# Detailed function explanation:
-# - Purpose: `_build_database_url` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds database url for the next step.
 def _build_database_url() -> str:
     # Build one SQLAlchemy-ready database URL from env vars.
     # Preference order:
@@ -82,13 +76,7 @@ def _build_database_url() -> str:
         f"mysql+{mysql_driver}://{mysql_user}:{mysql_password}"
         f"@{mysql_host}:{mysql_port}/{mysql_database}"
     )
-
-
-# Detailed function explanation:
-# - Purpose: `_build_vector_store_path` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds vector store path for the next step.
 def _build_vector_store_path() -> str:
     # Resolve vector DB directory to an absolute normalized path so all modules
     # read/write the same location regardless of current working directory.
@@ -121,3 +109,5 @@ CORS_ORIGINS = [
 
 MAX_UPLOAD_SIZE_MB = int(os.getenv("MAX_UPLOAD_SIZE_MB", "25"))
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
+

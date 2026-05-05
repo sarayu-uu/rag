@@ -5,14 +5,7 @@
 
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-
-/**
- * Detailed function explanation:
- * - Purpose: `ProtectedRoute` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Blocks access when the user is not authenticated. */
 export default function ProtectedRoute({ roles = [] }) {
   const { user, booting, isAuthenticated } = useAuth();
   const location = useLocation();
@@ -39,3 +32,6 @@ export default function ProtectedRoute({ roles = [] }) {
 
   return <Outlet />;
 }
+
+
+

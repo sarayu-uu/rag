@@ -32,13 +32,7 @@ from bs4 import BeautifulSoup
 # JSON
 import json
 import xml.etree.ElementTree as ET
-
-
-# Detailed function explanation:
-# - Purpose: `_run_powershell_office_conversion` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Runs powershell office conversion.
 def _run_powershell_office_conversion(
     script: str,
     source_path: Path,
@@ -67,23 +61,11 @@ def _run_powershell_office_conversion(
     except subprocess.CalledProcessError as exc:
         details = exc.stderr.strip() or exc.stdout.strip() or "Unknown conversion error."
         raise ValueError(f"Legacy Office file conversion failed: {details}") from exc
-
-
-# Detailed function explanation:
-# - Purpose: `load_pdf` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads pdf.
 def load_pdf(file_path: Union[str, Path]) -> str:
     sections = load_pdf_sections(file_path)
     return "\n".join(section["text"] for section in sections)
-
-
-# Detailed function explanation:
-# - Purpose: `load_pdf_sections` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads pdf sections.
 def load_pdf_sections(file_path: Union[str, Path]) -> list[dict[str, Union[int, str]]]:
     doc = fitz.open(file_path)
     sections: list[dict[str, Union[int, str]]] = []
@@ -96,13 +78,7 @@ def load_pdf_sections(file_path: Union[str, Path]) -> list[dict[str, Union[int, 
         )
     doc.close()
     return sections
-
-
-# Detailed function explanation:
-# - Purpose: `load_doc` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads doc.
 def load_doc(file_path: Union[str, Path]) -> str:
     source_path = Path(file_path)
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -125,26 +101,14 @@ def load_doc(file_path: Union[str, Path]) -> str:
         )
         _run_powershell_office_conversion(script, source_path, converted_path)
         return load_docx(converted_path)
-
-
-# Detailed function explanation:
-# - Purpose: `load_docx` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads docx.
 def load_docx(file_path: Union[str, Path]) -> str:
     doc = Document(file_path)
     text = ""
     for para in doc.paragraphs:
         text += para.text + "\n"
     return text
-
-
-# Detailed function explanation:
-# - Purpose: `load_ppt` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads ppt.
 def load_ppt(file_path: Union[str, Path]) -> str:
     source_path = Path(file_path)
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -166,13 +130,7 @@ def load_ppt(file_path: Union[str, Path]) -> str:
         )
         _run_powershell_office_conversion(script, source_path, converted_path)
         return load_pptx(converted_path)
-
-
-# Detailed function explanation:
-# - Purpose: `load_pptx` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads pptx.
 def load_pptx(file_path: Union[str, Path]) -> str:
     prs = Presentation(file_path)
     text = ""
@@ -181,24 +139,12 @@ def load_pptx(file_path: Union[str, Path]) -> str:
             if hasattr(shape, "text"):
                 text += shape.text + "\n"
     return text
-
-
-# Detailed function explanation:
-# - Purpose: `load_image` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads image.
 def load_image(file_path: Union[str, Path]) -> str:
     img = Image.open(file_path)
     text = pytesseract.image_to_string(img)
     return text
-
-
-# Detailed function explanation:
-# - Purpose: `load_csv` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads csv.
 def load_csv(file_path: Union[str, Path]) -> str:
     df = pd.read_csv(file_path)
     text = ""
@@ -206,23 +152,11 @@ def load_csv(file_path: Union[str, Path]) -> str:
         row_text = ", ".join([f"{col}: {row[col]}" for col in df.columns])
         text += row_text + "\n"
     return text
-
-
-# Detailed function explanation:
-# - Purpose: `load_txt` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads txt.
 def load_txt(file_path: Union[str, Path]) -> str:
     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
         return f.read()
-
-
-# Detailed function explanation:
-# - Purpose: `load_web` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads web.
 def load_web(url: str) -> str:
     response = requests.get(url, timeout=20)
     response.raise_for_status()
@@ -232,35 +166,18 @@ def load_web(url: str) -> str:
         script.decompose()
 
     return soup.get_text(separator="\n")
-
-
-# Detailed function explanation:
-# - Purpose: `load_json` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads json.
 def load_json(file_path: Union[str, Path]) -> str:
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return json.dumps(data, indent=2)
-
-
-# Detailed function explanation:
-# - Purpose: `load_xml` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads xml.
 def load_xml(file_path: Union[str, Path]) -> str:
     tree = ET.parse(file_path)
     root = tree.getroot()
 
     parts: list[str] = []
-
-    # Detailed function explanation:
-    # - Purpose: `walk` handles one focused step of this module's workflow.
-    # - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-    # - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-    #   (or raises a clear exception) so downstream code can continue reliably.
+    # Walks through XML elements and collects their text and attributes.
     def walk(element: ET.Element, path: str) -> None:
         current_path = f"{path}/{element.tag}" if path else element.tag
 
@@ -276,3 +193,5 @@ def load_xml(file_path: Union[str, Path]) -> str:
 
     walk(root, "")
     return "\n".join(parts)
+
+

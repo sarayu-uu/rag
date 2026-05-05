@@ -35,31 +35,13 @@ class TelemetryWritePayload:
     retrieval_latency_ms: int | None
     model_latency_ms: int | None
     error_count: int
-
-
-# Detailed function explanation:
-# - Purpose: `now_perf` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Returns the current high-resolution timer value.
 def now_perf() -> float:
     return perf_counter()
-
-
-# Detailed function explanation:
-# - Purpose: `elapsed_ms` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Converts the elapsed timer span into milliseconds.
 def elapsed_ms(start: float) -> int:
     return int((perf_counter() - start) * 1000)
-
-
-# Detailed function explanation:
-# - Purpose: `classify_request_type` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Classifies request type.
 def classify_request_type(path: str) -> RequestType | None:
     if path.startswith("/chat"):
         return RequestType.CHAT
@@ -68,13 +50,7 @@ def classify_request_type(path: str) -> RequestType | None:
     if path.startswith("/ingestion") or path.startswith("/documents"):
         return RequestType.INGESTION
     return None
-
-
-# Detailed function explanation:
-# - Purpose: `safe_int` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Safely converts a value to an integer.
 def safe_int(value: str | None) -> int | None:
     if value is None:
         return None
@@ -82,37 +58,19 @@ def safe_int(value: str | None) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
-
-
-# Detailed function explanation:
-# - Purpose: `estimate_token_count` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Estimates token count.
 def estimate_token_count(text: str) -> int:
     cleaned = (text or "").strip()
     if not cleaned:
         return 0
     return max(1, len(cleaned) // 4)
-
-
-# Detailed function explanation:
-# - Purpose: `estimate_cost` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Estimates cost.
 def estimate_cost(token_input: int, token_output: int) -> Decimal:
     return (
         Decimal(token_input) * DEFAULT_INPUT_TOKEN_COST
         + Decimal(token_output) * DEFAULT_OUTPUT_TOKEN_COST
     ).quantize(Decimal("0.000001"))
-
-
-# Detailed function explanation:
-# - Purpose: `build_write_payload` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds write payload for the next step.
 def build_write_payload(
     *,
     path: str,
@@ -161,13 +119,7 @@ def build_write_payload(
         model_latency_ms=model_latency_ms,
         error_count=1 if status_code >= 400 else 0,
     )
-
-
-# Detailed function explanation:
-# - Purpose: `write_metric_usage` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Saves one telemetry record to the database.
 def write_metric_usage(db: Session, payload: TelemetryWritePayload) -> None:
     row = MetricUsage(
         user_id=payload.user_id,
@@ -186,13 +138,7 @@ def write_metric_usage(db: Session, payload: TelemetryWritePayload) -> None:
     )
     db.add(row)
     db.commit()
-
-
-# Detailed function explanation:
-# - Purpose: `_apply_scope` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Applies the requested telemetry scope filter.
 def _apply_scope(statement, *, current_user: User):
     role_name = current_user.role.name if current_user.role else None
     if role_name is None:
@@ -201,13 +147,7 @@ def _apply_scope(statement, *, current_user: User):
     if role_name.value in {"Admin", "Manager"}:
         return statement, "global"
     return statement.where(MetricUsage.user_id == current_user.id), "current_user"
-
-
-# Detailed function explanation:
-# - Purpose: `build_telemetry_summary` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds telemetry summary for the next step.
 def build_telemetry_summary(db: Session, *, current_user: User, hours: int = 24) -> dict[str, Any]:
     hours = max(1, min(hours, 24 * 30))
     from_ts = datetime.utcnow() - timedelta(hours=hours)
@@ -327,3 +267,5 @@ def build_telemetry_summary(db: Session, *, current_user: User, hours: int = 24)
             "sampled_at_utc": datetime.utcnow().isoformat(),
         },
     }
+
+
