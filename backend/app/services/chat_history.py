@@ -54,15 +54,16 @@ def get_or_create_chat_session(
     user_id: int,
 ) -> tuple[ChatSession, bool]:
     if session_id is None:
+        #create a new chat
         return create_chat_session(db, question=question, user_id=user_id), True
-
+    # if chat session exsists then use that
     session = get_chat_session(db, session_id, user_id=user_id)
     if session is None:
         raise LookupError(f"Chat session {session_id} was not found for the authenticated user.")
-
     if not session.title:
         session.title = first_words(question)
     session.token_limit = CHAT_TOKEN_LIMIT
+    #check if there are any limits remaining
     if is_session_at_limit(session):
         session.status = SessionStatus.CLOSED_LIMIT
         if session.ended_at is None:
@@ -72,7 +73,7 @@ def get_or_create_chat_session(
         session.ended_at = None
     db.flush()
     return session, False
-# Appends chat message.
+# Appends chat message abd also adds it to the histroy i.e db
 def append_chat_message(
     db: Session,
     *,

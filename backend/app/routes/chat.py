@@ -60,6 +60,7 @@ class ChatQueryRequest(BaseModel):
     )
 
 
+#not used for development
 @router.post(
     "/answer-from-matches",
     summary="Phase 5: Generate a grounded answer from provided matches",
@@ -90,6 +91,7 @@ def generate_answer_from_matches(
     }
 
 
+# this is being used 
 @router.post(
     "/query",
     summary="Phase 6: Search across all indexed documents and generate a grounded answer",
@@ -108,11 +110,12 @@ def chat_query(
     try:
         #check if vector db is ready
         ensure_vector_store_ready()
-        # check what documents is allwoed
+        # check what documents is allowed and take only those
         allowed_document_ids = accessible_document_ids(db, current_user, permission_field="can_query")
         if allowed_document_ids is None:
             # Even for admin-like global access, constrain retrieval to existing DB documents only.
             allowed_document_ids = list(db.scalars(select(Document.id)).all())
+        # this loads the session or creates a new one
         session, created = get_or_create_chat_session(
             db,
             question=payload.question,
@@ -121,8 +124,10 @@ def chat_query(
         )
         if is_session_at_limit(session):
             raise HTTPException(status_code=403, detail="100% chat used. Start a new chat to continue.")
+        # builds the context of recent messages
         memory_context = build_memory_context(session)
         question_for_usage = payload.question.strip()
+        #uploads the qustion to the chat message as a user question
         user_message = append_chat_message(
             db,
             session=session,
@@ -131,6 +136,7 @@ def chat_query(
             content=question_for_usage,
             token_count=0,
         )
+        #here the retvival process happens
         result = answer_question_with_retrieval(
             question_for_usage,
             limit=payload.limit,
@@ -212,6 +218,7 @@ def get_sessions(
     }
 
 
+# get chat history
 @router.get(
     "/sessions/{session_id}/messages",
     summary="Phase 9: Get all messages for a session",
@@ -233,7 +240,7 @@ def get_session_messages(
         **payload,
     }
 
-
+# delete a chat
 @router.delete(
     "/sessions/{session_id}",
     summary="Phase 9: Delete a chat session",

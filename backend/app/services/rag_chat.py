@@ -206,10 +206,12 @@ def _rerank_hybrid_matches(
     semantic_matches: list[dict[str, Any]],
     keyword_matches: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    # normialize keyword and sematic scores
     semantic_scores = _normalize_semantic_scores(semantic_matches)
     keyword_scores = _normalize_keyword_scores(keyword_matches)
     merged: dict[str, dict[str, Any]] = {}
 
+    # make a dictionary of all matches 
     for match in semantic_matches:
         match_id = str(match["id"])
         merged[match_id] = {
@@ -232,6 +234,7 @@ def _rerank_hybrid_matches(
             "keyword_score": keyword_scores.get(match_id, 0.0),
         }
 
+    # reranked chunks are placed in descending order of scores
     reranked: list[dict[str, Any]] = []
     for item in merged.values():
         content_bonus = min(len(item.get("content", "")) / 1000.0, 0.15)
@@ -265,8 +268,8 @@ def answer_question_from_matches(
     cleaned_question = question.strip()
     if not cleaned_question:
         raise ValueError("question must not be empty.")
-
     normalized_matches = [_normalize_match(match, index) for index, match in enumerate(matches, start=1)]
+    # take only matches that have content
     usable_matches = [match for match in normalized_matches if match["content"]]
     if not usable_matches:
         return {
@@ -275,8 +278,9 @@ def answer_question_from_matches(
             "documents_used": [],
             "match_count": 0,
         }
-
+    # give system its prompt
     system_prompt = _render_prompt("rag_system.jinja2")
+    # make user prompt
     user_prompt = _render_prompt(
         "rag_user.jinja2",
         question=cleaned_question,
@@ -285,6 +289,7 @@ def answer_question_from_matches(
     )
 
     model_start = perf_counter()
+    # gget response
     response = build_chat_model().invoke(
         [
             SystemMessage(content=system_prompt),
@@ -292,6 +297,7 @@ def answer_question_from_matches(
         ]
     )
     model_latency_ms = int((perf_counter() - model_start) * 1000)
+    # take only answer
     answer = response.content if isinstance(response.content, str) else str(response.content)
     answer = _strip_inline_sources(answer)
     token_usage = _extract_token_usage(response)
@@ -315,26 +321,33 @@ def answer_question_with_retrieval(
 ) -> dict[str, Any]:
     retrieval_start = perf_counter()
     candidate_limit = max(limit * OVERFETCH_MULTIPLIER, limit)
+    # here semantic retrival runs
     semantic_matches = search_chunk_text(
         question,
         limit=candidate_limit,
         document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
+    # here keyword retival runs 
     keyword_matches = keyword_search_chunk_text(
         question,
         limit=candidate_limit,
         document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
+    # here reranking happens for matches
     reranked_matches = _rerank_hybrid_matches(semantic_matches, keyword_matches)
+    # limits the number of matches i.e reranked
     selected_matches = _select_multi_document_context(reranked_matches, limit=limit)
+    # store the latency
     retrieval_latency_ms = int((perf_counter() - retrieval_start) * 1000)
+    # here llm answers the question
     result = answer_question_from_matches(
         question,
         selected_matches,
         memory_context=memory_context,
     )
+    # add extra kv pairs
     result["matches"] = selected_matches
     result["retrieved_match_count"] = len(reranked_matches)
     result["retrieval_debug"] = {

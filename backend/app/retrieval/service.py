@@ -60,7 +60,7 @@ def sync_document_chunks_to_vector_store(chunks: list[DocumentChunk]) -> dict[st
 # Clears document vectors.
 def clear_document_vectors(document_id: int) -> None:
     delete_document_vectors(document_id)
-# Searches chunk text.
+# Searches chunk text for the relevent documents
 def search_chunk_text(
     query: str,
     *,
@@ -69,6 +69,7 @@ def search_chunk_text(
     document_ids: list[int] | None = None,
     owner_user_id: int | None = None,
 ) -> list[dict[str, Any]]:
+    #query is embeded
     query_vector = embed_query(query)
     results = search_vectors(
         query_vector,
