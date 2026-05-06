@@ -96,6 +96,7 @@ def _get_user_by_email(db: Session, email: str) -> User | None:
 # Signs up a new user.
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
     normalized_email = _normalize_email(payload.email)
+    # check username and email exsists before 
     existing_by_email = _get_user_by_email(db, normalized_email)
     if existing_by_email is not None:
         raise HTTPException(status_code=409, detail="A user with this email already exists.")
@@ -104,6 +105,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> dict[str, A
     if existing_by_username is not None:
         raise HTTPException(status_code=409, detail="A user with this username already exists.")
 
+    # generates otp and role and saves in the user table
     role = _get_signup_role(db)
     otp = _generate_otp()
     user = User(
