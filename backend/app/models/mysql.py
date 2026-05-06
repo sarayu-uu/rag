@@ -143,6 +143,7 @@ class Document(Base):
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     upload_user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
@@ -317,16 +318,24 @@ def ensure_schema_updates() -> None:
     """Apply lightweight schema updates for existing local databases."""
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
-    if "document_chunks" not in table_names:
+    if "document_chunks" not in table_names and "documents" not in table_names:
         return
 
-    chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")}
+    chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")} if "document_chunks" in table_names else set()
+    document_columns = {column["name"] for column in inspector.get_columns("documents")} if "documents" in table_names else set()
     with engine.begin() as connection:
         if "permissions_tags" not in chunk_columns:
             connection.execute(
                 text(
                     "ALTER TABLE document_chunks "
                     "ADD COLUMN permissions_tags VARCHAR(2000) NOT NULL DEFAULT '[]'"
+                )
+            )
+        if "file_hash" not in document_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE documents "
+                    "ADD COLUMN file_hash VARCHAR(64) NULL"
                 )
             )
 # Gets db.

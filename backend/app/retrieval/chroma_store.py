@@ -65,6 +65,7 @@ def upsert_chunk_vectors(records: list[dict[str, Any]]) -> None:
         embeddings.append(record["embedding"])
         metadatas.append(
             {
+                "id": str(record["id"]),
                 "document_id": int(metadata["document_id"]),
                 "chunk_index": int(metadata["chunk_index"]),
                 "page_number": int(metadata["page_number"]),

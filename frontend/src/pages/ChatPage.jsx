@@ -21,6 +21,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [error, setError] = useState("");
+  const [pipelineTrace, setPipelineTrace] = useState([]);
   const activeSession = sessions.find((session) => session.session_id === activeSessionId) || null;
   const activeSessionPercent = activeSession?.token_limit
     ? Math.min(100, Math.round(((activeSession?.tokens_used_total ?? 0) / Math.max(activeSession.token_limit, 1)) * 100))
@@ -104,6 +105,7 @@ export default function ChatPage() {
 
     setSending(true);
     setError("");
+    setPipelineTrace([]);
     try {
       const response = await queryChat({
         question: question.trim(),
@@ -111,6 +113,7 @@ export default function ChatPage() {
         sessionId: activeSessionId,
       });
       setAnswerPayload(response);
+      setPipelineTrace(response.pipeline_trace || []);
       setQuestion("");
       await loadSessions();
       const nextSessionId = response.session?.session_id;
@@ -133,6 +136,14 @@ export default function ChatPage() {
       />
 
       {error ? <div className="error-banner">{error}</div> : null}
+      {pipelineTrace.length ? (
+        <div className="success-banner">
+          <strong>Pipeline trace:</strong>
+          {pipelineTrace.map((step, idx) => (
+            <div key={`${idx}-${step}`}>{`${idx + 1}. ${step}`}</div>
+          ))}
+        </div>
+      ) : null}
 
       <section className="chat-layout">
         <SessionList

@@ -7,13 +7,23 @@ File purpose:
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Any
 
 from app.config.settings import EMBEDDING_MODEL, VECTOR_DIMENSION
 
 
 @lru_cache(maxsize=1)
 # Gets embedding model.
-def _get_embedding_model():
+def _get_embedding_model() -> Any:
+    # Prefer LangChain wrapper so embedding flow can plug into LC modules
+    # while retaining FastEmbed as the concrete embedding backend.
+    try:
+        from langchain_community.embeddings import FastEmbedEmbeddings
+
+        return FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
+    except Exception:
+        pass
+
     try:
         from fastembed import TextEmbedding
     except ImportError as exc:
@@ -38,9 +48,12 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     if not sanitized_texts:
         return []
 
-    #uses embeding model to embed 
+    # Uses FastEmbed via LangChain when available; otherwise direct fastembed.
     model = _get_embedding_model()
-    output = [vector.tolist() for vector in model.embed(sanitized_texts)]
+    if hasattr(model, "embed_documents"):
+        output = model.embed_documents(sanitized_texts)
+    else:
+        output = [vector.tolist() for vector in model.embed(sanitized_texts)]
     for vector in output:
         _validate_vector_dimension(vector)
     return output

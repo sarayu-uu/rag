@@ -10,11 +10,24 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth.security import get_current_user
-from app.models.mysql import Document, Permission, Role, RoleName, User, get_db
+from app.models.mysql import (
+    ChatMessage,
+    ChatSession,
+    Document,
+    DocumentChunk,
+    MetricUsage,
+    Permission,
+    Role,
+    RoleName,
+    User,
+    get_db,
+)
+from app.retrieval.service import clear_document_vectors
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -151,8 +164,35 @@ def delete_user(
         raise HTTPException(status_code=403, detail="You cannot delete your own account.")
 
     serialized_user = _serialize_user(user)
-    db.delete(user)
-    db.commit()
+    try:
+        # Collect user-owned document ids first for vector cleanup.
+        owned_document_ids = list(db.scalars(select(Document.id).where(Document.upload_user_id == user.id)).all())
+        for document_id in owned_document_ids:
+            clear_document_vectors(int(document_id))
+
+        # Explicit dependency cleanup for DBs that still use NO ACTION FK rules.
+        db.execute(delete(ChatMessage).where(ChatMessage.user_id == user.id))
+        db.execute(delete(ChatMessage).where(ChatMessage.session_id.in_(select(ChatSession.id).where(ChatSession.user_id == user.id))))
+        db.execute(delete(MetricUsage).where(MetricUsage.user_id == user.id))
+        db.execute(delete(MetricUsage).where(MetricUsage.session_id.in_(select(ChatSession.id).where(ChatSession.user_id == user.id))))
+        db.execute(delete(ChatSession).where(ChatSession.user_id == user.id))
+
+        db.execute(delete(Permission).where(Permission.user_id == user.id))
+        db.execute(delete(Permission).where(Permission.granted_by == user.id))
+        db.execute(delete(Permission).where(Permission.document_id.in_(select(Document.id).where(Document.upload_user_id == user.id))))
+
+        db.execute(delete(DocumentChunk).where(DocumentChunk.owner_user_id == user.id))
+        db.execute(delete(DocumentChunk).where(DocumentChunk.document_id.in_(select(Document.id).where(Document.upload_user_id == user.id))))
+        db.execute(delete(Document).where(Document.upload_user_id == user.id))
+
+        db.delete(user)
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete user from MySQL: {exc}") from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=f"Failed to delete user dependencies: {exc}") from exc
 
     return {
         "status": "success",

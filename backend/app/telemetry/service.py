@@ -35,13 +35,19 @@ class TelemetryWritePayload:
     retrieval_latency_ms: int | None
     model_latency_ms: int | None
     error_count: int
-# Returns the current high-resolution timer value.
+
+
+# Starts a precise timer for one request so we can measure end-to-end latency.
 def now_perf() -> float:
     return perf_counter()
-# Converts the elapsed timer span into milliseconds.
+
+
+# Converts the elapsed time since `start` into milliseconds for telemetry fields.
 def elapsed_ms(start: float) -> int:
     return int((perf_counter() - start) * 1000)
-# Classifies request type.
+
+
+# Maps URL paths to a small set of request categories used in dashboards and summaries.
 def classify_request_type(path: str) -> RequestType | None:
     if path.startswith("/chat"):
         return RequestType.CHAT
@@ -50,7 +56,9 @@ def classify_request_type(path: str) -> RequestType | None:
     if path.startswith("/ingestion") or path.startswith("/documents"):
         return RequestType.INGESTION
     return None
-# Safely converts a value to an integer.
+
+
+# Safely parses string-like values into ints and returns None when parsing fails.
 def safe_int(value: str | None) -> int | None:
     if value is None:
         return None
@@ -58,19 +66,26 @@ def safe_int(value: str | None) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
-# Estimates token count.
+
+
+# Estimates token usage from text length when exact model token data is not available.
 def estimate_token_count(text: str) -> int:
     cleaned = (text or "").strip()
     if not cleaned:
         return 0
     return max(1, len(cleaned) // 4)
-# Estimates cost.
+
+
+# Estimates request cost from input/output token counts using configured per-token rates.
 def estimate_cost(token_input: int, token_output: int) -> Decimal:
     return (
         Decimal(token_input) * DEFAULT_INPUT_TOKEN_COST
         + Decimal(token_output) * DEFAULT_OUTPUT_TOKEN_COST
     ).quantize(Decimal("0.000001"))
-# Builds write payload for the next step.
+
+
+# Builds one normalized telemetry payload from request path, response headers, and status.
+# This is where defaults/fallbacks are applied when some headers are missing.
 def build_write_payload(
     *,
     path: str,
@@ -119,7 +134,9 @@ def build_write_payload(
         model_latency_ms=model_latency_ms,
         error_count=1 if status_code >= 400 else 0,
     )
-# Saves one telemetry record to the database.
+
+
+# Persists a single telemetry row into `metrics_usage` and commits immediately.
 def write_metric_usage(db: Session, payload: TelemetryWritePayload) -> None:
     row = MetricUsage(
         user_id=payload.user_id,
@@ -138,7 +155,10 @@ def write_metric_usage(db: Session, payload: TelemetryWritePayload) -> None:
     )
     db.add(row)
     db.commit()
-# Applies the requested telemetry scope filter.
+
+
+# Applies role-based visibility rules to telemetry queries:
+# admins/managers can see global data; other users only see their own rows.
 def _apply_scope(statement, *, current_user: User):
     role_name = current_user.role.name if current_user.role else None
     if role_name is None:
@@ -147,7 +167,10 @@ def _apply_scope(statement, *, current_user: User):
     if role_name.value in {"Admin", "Manager"}:
         return statement, "global"
     return statement.where(MetricUsage.user_id == current_user.id), "current_user"
-# Builds telemetry summary for the next step.
+
+
+# Builds the telemetry summary response for the requested time window.
+# It aggregates usage, error, latency, and cost stats, then attaches DB/vector health signals.
 def build_telemetry_summary(db: Session, *, current_user: User, hours: int = 24) -> dict[str, Any]:
     hours = max(1, min(hours, 24 * 30))
     from_ts = datetime.utcnow() - timedelta(hours=hours)

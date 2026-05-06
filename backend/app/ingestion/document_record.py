@@ -28,6 +28,7 @@ def build_document_record_payload(
     file_type: str,
     upload_user_id: int | None,
     source_url: str | None,
+    file_hash: str | None = None,
     document_name: str | None = None,
     page_numbers: list[int] | None = None,
 ) -> dict[str, Any]:
@@ -42,6 +43,7 @@ def build_document_record_payload(
         "file_type": file_type,
         "storage_path": storage_path,
         "source_url": source_url,
+        "file_hash": file_hash,
         "upload_user_id": upload_user_id,
         "uploaded_at": now.isoformat(),
         "status": "uploaded",
@@ -72,6 +74,7 @@ def save_document_record(db: Session, payload: dict[str, Any]) -> Document:
         file_type=payload["file_type"],
         storage_path=payload["storage_path"],
         source_url=payload.get("source_url"),
+        file_hash=payload.get("file_hash"),
         upload_user_id=payload["upload_user_id"],
         status=status,
     )

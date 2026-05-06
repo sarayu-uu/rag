@@ -16,13 +16,11 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.retrieval.service import keyword_search_chunk_text, search_chunk_text
+from app.retrieval.service import hybrid_search_chunk_text
 from app.services.chatgroq_bot import build_chat_model
 
 MAX_CONTEXT_CHARS = 12000
 OVERFETCH_MULTIPLIER = 3
-SEMANTIC_WEIGHT = 0.65
-KEYWORD_WEIGHT = 0.35
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 # Pulls token usage details from the model response.
 def _extract_token_usage(response: Any) -> dict[str, int]:
@@ -182,82 +180,6 @@ def _select_multi_document_context(matches: list[dict[str, Any]], *, limit: int)
             break
 
     return selected
-# Normalizes semantic scores into a consistent format.
-def _normalize_semantic_scores(matches: list[dict[str, Any]]) -> dict[str, float]:
-    if not matches:
-        return {}
-    max_distance = max(match["score"] for match in matches) or 1.0
-    normalized: dict[str, float] = {}
-    for match in matches:
-        # Lower Chroma distance is better, so invert into a similarity-like score.
-        normalized[str(match["id"])] = max(0.0, 1.0 - (float(match["score"]) / max_distance))
-    return normalized
-# Normalizes keyword scores into a consistent format.
-def _normalize_keyword_scores(matches: list[dict[str, Any]]) -> dict[str, float]:
-    if not matches:
-        return {}
-    max_score = max(match["score"] for match in matches) or 1.0
-    normalized: dict[str, float] = {}
-    for match in matches:
-        normalized[str(match["id"])] = float(match["score"]) / max_score
-    return normalized
-# Reranks semantic and keyword matches together.
-def _rerank_hybrid_matches(
-    semantic_matches: list[dict[str, Any]],
-    keyword_matches: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    # normialize keyword and sematic scores
-    semantic_scores = _normalize_semantic_scores(semantic_matches)
-    keyword_scores = _normalize_keyword_scores(keyword_matches)
-    merged: dict[str, dict[str, Any]] = {}
-
-    # make a dictionary of all matches 
-    for match in semantic_matches:
-        match_id = str(match["id"])
-        merged[match_id] = {
-            **match,
-            "retrieval_method": "semantic",
-            "semantic_score": semantic_scores.get(match_id, 0.0),
-            "keyword_score": keyword_scores.get(match_id, 0.0),
-        }
-
-    for match in keyword_matches:
-        match_id = str(match["id"])
-        if match_id in merged:
-            merged[match_id]["keyword_score"] = keyword_scores.get(match_id, 0.0)
-            merged[match_id]["retrieval_method"] = "hybrid"
-            continue
-
-        merged[match_id] = {
-            **match,
-            "semantic_score": semantic_scores.get(match_id, 0.0),
-            "keyword_score": keyword_scores.get(match_id, 0.0),
-        }
-
-    # reranked chunks are placed in descending order of scores
-    reranked: list[dict[str, Any]] = []
-    for item in merged.values():
-        content_bonus = min(len(item.get("content", "")) / 1000.0, 0.15)
-        rerank_score = (
-            item.get("semantic_score", 0.0) * SEMANTIC_WEIGHT
-            + item.get("keyword_score", 0.0) * KEYWORD_WEIGHT
-            + content_bonus
-        )
-        reranked.append(
-            {
-                **item,
-                "rerank_score": rerank_score,
-            }
-        )
-
-    reranked.sort(
-        key=lambda item: (
-            -item["rerank_score"],
-            item["document_id"],
-            item["chunk_index"],
-        )
-    )
-    return reranked
 # Answers question from matches.
 def answer_question_from_matches(
     question: str,
@@ -321,22 +243,13 @@ def answer_question_with_retrieval(
 ) -> dict[str, Any]:
     retrieval_start = perf_counter()
     candidate_limit = max(limit * OVERFETCH_MULTIPLIER, limit)
-    # here semantic retrival runs
-    semantic_matches = search_chunk_text(
+    retrieval_payload = hybrid_search_chunk_text(
         question,
         limit=candidate_limit,
         document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
-    # here keyword retival runs 
-    keyword_matches = keyword_search_chunk_text(
-        question,
-        limit=candidate_limit,
-        document_ids=document_ids,
-        owner_user_id=owner_user_id,
-    )
-    # here reranking happens for matches
-    reranked_matches = _rerank_hybrid_matches(semantic_matches, keyword_matches)
+    reranked_matches = retrieval_payload.get("matches", [])
     # limits the number of matches i.e reranked
     selected_matches = _select_multi_document_context(reranked_matches, limit=limit)
     # store the latency
@@ -351,11 +264,18 @@ def answer_question_with_retrieval(
     result["matches"] = selected_matches
     result["retrieved_match_count"] = len(reranked_matches)
     result["retrieval_debug"] = {
-        "semantic_match_count": len(semantic_matches),
-        "keyword_match_count": len(keyword_matches),
-        "hybrid_match_count": len(reranked_matches),
+        "semantic_match_count": int(retrieval_payload.get("semantic_match_count", 0)),
+        "keyword_match_count": int(retrieval_payload.get("keyword_match_count", 0)),
+        "hybrid_match_count": int(retrieval_payload.get("hybrid_match_count", len(reranked_matches))),
     }
     result["retrieval_latency_ms"] = retrieval_latency_ms
+    result["pipeline_trace"] = [
+        "semantic_retrieval -> app.retrieval.service.search_chunk_text (LangChain Chroma)",
+        "keyword_retrieval -> app.retrieval.service.keyword_search_chunk_text (LangChain BM25Retriever)",
+        "hybrid_fusion -> app.retrieval.service.hybrid_search_chunk_text (LangChain EnsembleRetriever)",
+        "context_select -> app.services.rag_chat._select_multi_document_context",
+        "answer_generation -> app.services.rag_chat.answer_question_from_matches",
+    ]
     return result
 
 

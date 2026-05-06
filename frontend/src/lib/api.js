@@ -104,6 +104,40 @@ async function request(path, options = {}, retry = true) {
 
   return parseResponse(response);
 }
+
+async function requestBlob(path, options = {}, retry = true) {
+  const headers = new Headers(options.headers || {});
+  if (authStore.accessToken) {
+    headers.set("Authorization", `Bearer ${authStore.accessToken}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+    redirect: "follow",
+  });
+
+  if (response.status === 401 && retry && authStore.refreshToken) {
+    try {
+      await refreshAccessToken();
+      return requestBlob(path, options, false);
+    } catch (refreshError) {
+      setStoredTokens(null);
+      throw refreshError;
+    }
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const detail = data?.detail || data?.message || `Request failed (${response.status})`;
+    const error = new Error(detail);
+    error.status = response.status;
+    error.payload = data;
+    throw error;
+  }
+
+  return response.blob();
+}
 /** Normalizes role into a consistent format. */
 export function normalizeRole(role) {
   return role || ROLE_KEYS.GUEST;
@@ -171,6 +205,15 @@ export async function deleteDocument(documentId) {
     method: "DELETE",
   });
 }
+/** Opens a document in a new browser tab using authenticated download. */
+export async function openDocumentView(documentId) {
+  const blob = await requestBlob(`/documents/${documentId}/view`, {
+    method: "GET",
+  });
+  const blobUrl = URL.createObjectURL(blob);
+  window.open(blobUrl, "_blank", "noopener,noreferrer");
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+}
 /** Uploads document. */
 export async function uploadDocument({ file, chunkSize = 500, chunkOverlap = 100, permissionsTags = [] }) {
   const formData = new FormData();
@@ -180,6 +223,21 @@ export async function uploadDocument({ file, chunkSize = 500, chunkOverlap = 100
   formData.append("permissions_tags", JSON.stringify(permissionsTags));
 
   return request("/documents/upload", {
+    method: "POST",
+    body: formData,
+  });
+}
+/** Uploads multiple documents. */
+export async function uploadDocumentsBatch({ files, chunkSize = 500, chunkOverlap = 100, permissionsTags = [] }) {
+  const formData = new FormData();
+  for (const file of files || []) {
+    formData.append("files", file);
+  }
+  formData.append("chunk_size", String(chunkSize));
+  formData.append("chunk_overlap", String(chunkOverlap));
+  formData.append("permissions_tags", JSON.stringify(permissionsTags));
+
+  return request("/documents/upload-batch", {
     method: "POST",
     body: formData,
   });

@@ -9,6 +9,7 @@ File purpose:
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from time import perf_counter
@@ -98,6 +99,36 @@ def _single_input_guard(file: UploadFile | None, url: str | None) -> None:
             status_code=400,
             detail="Provide exactly one input: either 'file' or 'url'.",
         )
+
+
+def _compute_file_sha256(file_path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(file_path, "rb") as handle:
+        while True:
+            block = handle.read(1024 * 1024)
+            if not block:
+                break
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _compute_text_sha256(text: str) -> str:
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+
+
+def _find_duplicate_document_id(
+    db: Session,
+    *,
+    upload_user_id: int,
+    file_hash: str,
+) -> int | None:
+    duplicate_id = db.scalar(
+        select(Document.id).where(
+            Document.upload_user_id == int(upload_user_id),
+            Document.file_hash == file_hash,
+        )
+    )
+    return int(duplicate_id) if duplicate_id is not None else None
 
 
 # Validates chunk size and overlap from form input.
@@ -314,12 +345,24 @@ def step_load(
             raw_text = result["text"]
             metadata = result["metadata"]
             validate_extracted_content(raw_text)
+            url_hash = _compute_text_sha256(raw_text)
+            duplicate_id = _find_duplicate_document_id(
+                db,
+                upload_user_id=upload_user.id,
+                file_hash=url_hash,
+            )
+            if duplicate_id is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Duplicate content detected. Existing document_id: {duplicate_id}.",
+                )
             document_payload = build_document_record_payload(
                 source="url",
                 storage_path=url,
                 file_type=metadata["file_type"],
                 upload_user_id=upload_user.id,
                 source_url=url,
+                file_hash=url_hash,
                 document_name=metadata["document_name"],
                 page_numbers=metadata["page_numbers"],
             )
@@ -353,6 +396,21 @@ def step_load(
     ext = validate_file_type(file.filename)
     file_path, file_size, safe_name = _save_upload(file, ext)
     try:
+        file_hash = _compute_file_sha256(file_path)
+        duplicate_id = _find_duplicate_document_id(
+            db,
+            upload_user_id=upload_user.id,
+            file_hash=file_hash,
+        )
+        if duplicate_id is not None:
+            try:
+                file_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise HTTPException(
+                status_code=409,
+                detail=f"Duplicate content detected. Existing document_id: {duplicate_id}.",
+            )
         result = load_file_with_metadata(file_path, document_name=Path(file.filename).name)
         raw_text = result["text"]
         metadata = result["metadata"]
@@ -363,6 +421,7 @@ def step_load(
             file_type=metadata["file_type"],
             upload_user_id=upload_user.id,
             source_url=None,
+            file_hash=file_hash,
             document_name=metadata["document_name"],
             page_numbers=metadata["page_numbers"],
         )
@@ -409,6 +468,19 @@ def _build_upload_response(
     vector_collection: str | None = None,
     vector_indexed: bool = False,
 ) -> dict[str, Any]:
+    pipeline_trace = [
+        "validate_file_type -> app.ingestion.validators.validate_file_type",
+        "validate_file_size -> app.ingestion.validators.validate_file_size",
+        "load/extract -> app.ingestion.router.load_file_with_metadata|load_url_with_metadata",
+        "content_validate_raw -> app.ingestion.validators.validate_extracted_content",
+        "clean_text -> app.ingestion.text_cleaning.clean_text",
+        "content_validate_cleaned -> app.ingestion.validators.validate_extracted_content",
+        "chunking -> app.ingestion.chunking.chunk_text|chunk_sections (LangChain RecursiveCharacterTextSplitter with fallback)",
+        "persist_chunks -> app.ingestion.document_record.replace_document_chunks",
+    ]
+    if vector_indexed:
+        pipeline_trace.append("embed+index -> app.retrieval.service.sync_document_chunks_to_vector_store")
+
     return {
         "status": "success",
         "source": source,
@@ -422,6 +494,7 @@ def _build_upload_response(
         "vector_indexed": vector_indexed,
         "vector_collection": vector_collection,
         "chunks": _serialize_chunks(saved_chunks),
+        "pipeline_trace": pipeline_trace,
     }
 
 
@@ -455,6 +528,17 @@ def _run_upload_pipeline(
             validate_extracted_content(raw_text)
             cleaned_text = clean_text(raw_text)
             validate_extracted_content(cleaned_text)
+            url_hash = _compute_text_sha256(cleaned_text)
+            duplicate_id = _find_duplicate_document_id(
+                db,
+                upload_user_id=effective_upload_user.id,
+                file_hash=url_hash,
+            )
+            if duplicate_id is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Duplicate content detected. Existing document_id: {duplicate_id}.",
+                )
 
             document_payload = build_document_record_payload(
                 source="url",
@@ -462,6 +546,7 @@ def _run_upload_pipeline(
                 file_type=metadata["file_type"],
                 upload_user_id=effective_upload_user.id,
                 source_url=url,
+                file_hash=url_hash,
                 document_name=metadata["document_name"],
                 page_numbers=metadata["page_numbers"],
             )
@@ -521,6 +606,21 @@ def _run_upload_pipeline(
     #check file size and save uplaod in uploads folder
     file_path, file_size, safe_name = _save_upload(file, ext)
     try:
+        file_hash = _compute_file_sha256(file_path)
+        duplicate_id = _find_duplicate_document_id(
+            db,
+            upload_user_id=effective_upload_user.id,
+            file_hash=file_hash,
+        )
+        if duplicate_id is not None:
+            try:
+                file_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise HTTPException(
+                status_code=409,
+                detail=f"Duplicate content detected. Existing document_id: {duplicate_id}.",
+            )
         # this is used to find the extenstion to extract text
         result = load_file_with_metadata(file_path, document_name=Path(file.filename).name)
         raw_text = result["text"]
@@ -535,6 +635,7 @@ def _run_upload_pipeline(
             file_type=metadata["file_type"],
             upload_user_id=effective_upload_user.id,
             source_url=None,
+            file_hash=file_hash,
             document_name=metadata["document_name"],
             page_numbers=metadata["page_numbers"],
         )

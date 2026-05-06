@@ -10,12 +10,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.auth.permissions import accessible_document_ids
 from app.auth.security import get_current_user
-from app.models.mysql import ChatSession, Document, MessageRole, User, get_db
+from app.models.mysql import ChatMessage, ChatSession, Document, MessageRole, MetricUsage, User, get_db
 from app.retrieval.service import ensure_vector_store_ready
 from app.services.chat_history import (
     append_chat_message,
@@ -256,8 +257,16 @@ def delete_session(
     if session is None or session.user_id != current_user.id:
         raise HTTPException(status_code=404, detail=f"Chat session {session_id} was not found.")
 
-    db.delete(session)
-    db.commit()
+    try:
+        # Explicitly delete dependent rows to support existing DBs
+        # where FK constraints may not be ON DELETE CASCADE.
+        db.execute(delete(ChatMessage).where(ChatMessage.session_id == session_id))
+        db.execute(delete(MetricUsage).where(MetricUsage.session_id == session_id))
+        db.delete(session)
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete chat session from MySQL: {exc}") from exc
 
     return {
         "status": "success",
