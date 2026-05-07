@@ -333,6 +333,19 @@ def ensure_schema_updates() -> None:
         return
 
     chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")}
+    permission_columns: set[str] = set()
+    if "permissions" in table_names:
+        permission_columns = {column["name"] for column in inspector.get_columns("permissions")}
+
+    permission_indexes: set[str] = set()
+    if "permissions" in table_names:
+        permission_indexes = {index["name"] for index in inspector.get_indexes("permissions")}
+
+    trigger_names: set[str] = set()
+    with engine.connect() as connection:
+        trigger_rows = connection.execute(text("SHOW TRIGGERS")).fetchall()
+        trigger_names = {str(row[0]) for row in trigger_rows}
+
     with engine.begin() as connection:
         if "permissions_tags" not in chunk_columns:
             connection.execute(
