@@ -25,13 +25,7 @@ from .loaders import (
     load_xml,
     load_web,
 )
-
-
-# Detailed function explanation:
-# - Purpose: `load_file` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads file.
 def load_file(file_path: Union[str, Path]) -> str:
     # Detect file extension and forward to the right extraction function.
     # This is the single switch-point for supported local file types.
@@ -70,13 +64,7 @@ def load_file(file_path: Union[str, Path]) -> str:
 
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
-
-
-# Detailed function explanation:
-# - Purpose: `load_url` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads url.
 def load_url(url: str) -> str:
     # Validate URL shape first so downstream loader gets only proper http/https inputs.
     # Then load and extract visible text from the web page.
@@ -88,13 +76,7 @@ def load_url(url: str) -> str:
         return load_web(url)
     except Exception as exc:
         raise ValueError(f"Failed to load URL: {exc}") from exc
-
-
-# Detailed function explanation:
-# - Purpose: `load_file_with_metadata` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads file with metadata.
 def load_file_with_metadata(
     file_path: Union[str, Path],
     *,
@@ -127,13 +109,7 @@ def load_file_with_metadata(
             "page_numbers": page_numbers,
         },
     }
-
-
-# Detailed function explanation:
-# - Purpose: `load_url_with_metadata` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads url with metadata.
 def load_url_with_metadata(url: str) -> dict[str, Any]:
     # Same normalized contract as file-based loader, but for web URLs.
     # `document_name` is set to domain so UI/citations have a readable source label.
@@ -155,3 +131,5 @@ def load_url_with_metadata(url: str) -> dict[str, Any]:
             "page_numbers": [],
         },
     }
+
+

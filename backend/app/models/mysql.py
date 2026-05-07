@@ -143,6 +143,7 @@ class Document(Base):
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     upload_user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
@@ -301,13 +302,7 @@ class MetricUsage(Base):
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     session: Mapped["ChatSession"] = relationship(back_populates="metrics")
-
-
-# Detailed function explanation:
-# - Purpose: `init_db` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Creates database tables and seeds initial data.
 def init_db() -> None:
     # Called during app startup.
     # Ensures schema exists, applies small backward-compatible updates,
@@ -316,23 +311,18 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     ensure_schema_updates()
     seed_roles()
-
-
-# Detailed function explanation:
-# - Purpose: `ensure_schema_updates` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Ensures schema updates is ready.
 def ensure_schema_updates() -> None:
     # Lightweight migration helper for local/dev databases.
     # Prevents runtime failures when code expects new columns in older DBs.
     """Apply lightweight schema updates for existing local databases."""
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
-    if "document_chunks" not in table_names:
+    if "document_chunks" not in table_names and "documents" not in table_names:
         return
 
-    chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")}
+    chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")} if "document_chunks" in table_names else set()
+    document_columns = {column["name"] for column in inspector.get_columns("documents")} if "documents" in table_names else set()
     permission_columns: set[str] = set()
     if "permissions" in table_names:
         permission_columns = {column["name"] for column in inspector.get_columns("permissions")}
@@ -345,7 +335,6 @@ def ensure_schema_updates() -> None:
     with engine.connect() as connection:
         trigger_rows = connection.execute(text("SHOW TRIGGERS")).fetchall()
         trigger_names = {str(row[0]) for row in trigger_rows}
-
     with engine.begin() as connection:
         if "permissions_tags" not in chunk_columns:
             connection.execute(
@@ -416,13 +405,14 @@ def ensure_schema_updates() -> None:
                         "END"
                     )
                 )
+        if "file_hash" not in document_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE documents "
+                    "ADD COLUMN file_hash VARCHAR(64) NULL"
+                )
+            )
 
-
-# Detailed function explanation:
-# - Purpose: `get_db` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
 def get_db() -> Generator[Session, None, None]:
     # FastAPI dependency provider.
     # Opens one DB session per request and guarantees cleanup afterwards.
@@ -432,26 +422,14 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-
-
-# Detailed function explanation:
-# - Purpose: `check_db_connection` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Checks db connection.
 def check_db_connection() -> None:
     # Used by health endpoint/startup diagnostics to verify DB reachability.
     # Raises immediately if connection is broken/misconfigured.
     """Raise if the configured database is unreachable."""
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
-
-
-# Detailed function explanation:
-# - Purpose: `seed_roles` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Seeds roles.
 def seed_roles() -> None:
     # Ensures required RBAC roles exist in every environment.
     # Safe to run repeatedly because it inserts only missing roles.
@@ -469,13 +447,7 @@ def seed_roles() -> None:
 
         db.add_all(missing_roles)
         db.commit()
-
-
-# Detailed function explanation:
-# - Purpose: `get_or_create_default_ingestion_user` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets or create default ingestion user.
 def get_or_create_default_ingestion_user(db: Session) -> User:
     # Fallback uploader identity for ingestion flows that run without
     # a logged-in user context (legacy/dev utility paths).
@@ -500,3 +472,5 @@ def get_or_create_default_ingestion_user(db: Session) -> User:
     db.add(user)
     db.flush()
     return user
+
+

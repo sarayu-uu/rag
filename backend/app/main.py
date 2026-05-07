@@ -27,11 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-# Detailed function explanation:
-# - Purpose: `lifespan` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Runs startup and shutdown tasks for the FastAPI app.
 async def lifespan(app: FastAPI):
     app.state.database_ready = False
     app.state.database_error = None
@@ -81,16 +77,21 @@ app.include_router(test_eval_router)
     summary="System: API root",
     description="Usage: Used for quick manual checks. Purpose: confirms the API is running and points to /docs.",
 )
-# Detailed function explanation:
-# - Purpose: `root` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Returns the API welcome response.
 async def root():
     return {"message": "RAG Ingestion API is running", "docs": "/docs"}
 
 
-@app.get("/health", tags=["system"])
+@app.get(
+    "/health",
+    tags=["system"],
+    summary="System: health check",
+    description=(
+        "Usage: Used by frontend/operations health checks. "
+        "Purpose: reports database connectivity and optional vector-store health."
+    ),
+)
+# Returns API, database, and vector store health details.
 async def health(include_vector_store: bool = False):
     database_status = {"status": "ok", "database": "connected"}
     try:
@@ -126,3 +127,5 @@ async def health(include_vector_store: bool = False):
         "vector_collection": vector_status.get("collection"),
         "vector_detail": vector_status.get("detail"),
     }
+
+

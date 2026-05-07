@@ -36,6 +36,7 @@ _REPLACEMENTS = {
 # Removes noisy formatting artifacts from extracted text
 # (extra symbols, repeated separators, broken spacing patterns)
 # so the content is cleaner before chunking/retrieval.
+# Removes noisy formatting.
 def remove_noisy_formatting(text: str) -> str:
     """
     Remove common formatting noise while keeping readable content intact.
@@ -72,6 +73,7 @@ def remove_noisy_formatting(text: str) -> str:
 
 # Cleans whitespace in extracted text by removing extra spaces/blank lines
 # and normalizing line breaks, so the text is consistent before chunking.
+# Normalizes whitespace into a consistent format.
 def normalize_whitespace(text: str) -> str:
     """
     Normalize whitespace while preserving paragraph boundaries.
@@ -93,6 +95,7 @@ def normalize_whitespace(text: str) -> str:
 # Main text-cleaning pipeline for extracted content.
 # Runs whitespace normalization + noisy-format cleanup,
 # and returns cleaner text ready for validation and chunking.
+# Cleans text.
 def clean_text(text: str) -> str:
     """
     Full text-cleaning pipeline for extracted raw text.
@@ -103,6 +106,7 @@ def clean_text(text: str) -> str:
 # Cleans a list of text sections (for example page-wise content),
 # applies text cleanup to each section, and keeps section metadata intact
 # so downstream chunking/citation logic still knows source boundaries.
+# Cleans sections.
 def clean_sections(
     sections: list[dict[str, Any]],
     *,
@@ -123,4 +127,5 @@ def clean_sections(
         cleaned_sections.append(section_copy)
 
     return cleaned_sections
+
 

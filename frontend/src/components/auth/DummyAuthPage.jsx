@@ -13,14 +13,7 @@ const ROLE_OPTIONS = [
   ROLE_KEYS.VIEWER,
   ROLE_KEYS.GUEST,
 ];
-
-/**
- * Detailed function explanation:
- * - Purpose: `EyeIcon` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the password visibility icon. */
 function EyeIcon({ open }) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="password-visibility-icon">
@@ -35,14 +28,7 @@ function EyeIcon({ open }) {
     </svg>
   );
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `DummyAuthPage` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the temporary auth demo page. */
 export default function DummyAuthPage({
   mode,
   form,
@@ -136,3 +122,6 @@ export default function DummyAuthPage({
     </main>
   );
 }
+
+
+

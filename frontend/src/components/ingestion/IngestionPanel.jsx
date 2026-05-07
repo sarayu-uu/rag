@@ -5,28 +5,14 @@
 
 import { useState } from "react";
 import { uploadDocument, uploadDocumentsBatch } from "../../lib/api";
-
-/**
- * Detailed function explanation:
- * - Purpose: `IngestionPanel` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the ingestion upload panel. */
 export default function IngestionPanel({ onIndexed }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleUpload` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
-  const handleUpload = async () => {
+  /** Uploads the selected file or form data. */
+ handleUpload = async () => {
     if (files.length === 0) {
       setError("Choose at least one file first.");
       return;
@@ -114,3 +100,6 @@ export default function IngestionPanel({ onIndexed }) {
     </section>
   );
 }
+
+
+

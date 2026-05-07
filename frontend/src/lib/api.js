@@ -12,14 +12,7 @@ let authStore = {
   accessToken: "",
   refreshToken: "",
 };
-
-/**
- * Detailed function explanation:
- * - Purpose: `getStoredTokens` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets saved auth tokens from local storage. */
 export function getStoredTokens() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -36,14 +29,7 @@ export function getStoredTokens() {
     return { accessToken: "", refreshToken: "" };
   }
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `setStoredTokens` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Saves auth tokens to local storage and memory. */
 export function setStoredTokens(tokens) {
   authStore = {
     accessToken: tokens?.accessToken || "",
@@ -59,14 +45,7 @@ export function setStoredTokens(tokens) {
 }
 
 authStore = getStoredTokens();
-
-/**
- * Detailed function explanation:
- * - Purpose: `parseResponse` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Parses an API response and raises an error for failed requests. */
 async function parseResponse(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -78,14 +57,7 @@ async function parseResponse(response) {
   }
   return data;
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `refreshAccessToken` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Requests a new access token using the refresh token. */
 async function refreshAccessToken() {
   if (!authStore.refreshToken) {
     throw new Error("No refresh token available.");
@@ -105,14 +77,7 @@ async function refreshAccessToken() {
   });
   return authStore.accessToken;
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `request` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Sends an API request and retries once after token refresh. */
 async function request(path, options = {}, retry = true) {
   const headers = new Headers(options.headers || {});
   if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
@@ -140,157 +105,116 @@ async function request(path, options = {}, retry = true) {
   return parseResponse(response);
 }
 
-/**
- * Detailed function explanation:
- * - Purpose: `normalizeRole` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+async function requestBlob(path, options = {}, retry = true) {
+  const headers = new Headers(options.headers || {});
+  if (authStore.accessToken) {
+    headers.set("Authorization", `Bearer ${authStore.accessToken}`);
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+    redirect: "follow",
+  });
+
+  if (response.status === 401 && retry && authStore.refreshToken) {
+    try {
+      await refreshAccessToken();
+      return requestBlob(path, options, false);
+    } catch (refreshError) {
+      setStoredTokens(null);
+      throw refreshError;
+    }
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    const detail = data?.detail || data?.message || `Request failed (${response.status})`;
+    const error = new Error(detail);
+    error.status = response.status;
+    error.payload = data;
+    throw error;
+  }
+
+  return response.blob();
+}
+/** Normalizes role into a consistent format. */
 export function normalizeRole(role) {
   return role || ROLE_KEYS.GUEST;
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `signup` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Signs up a new user. */
 export async function signup(payload) {
   return request("/auth/signup", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `verifyOtp` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Verifies otp. */
 export async function verifyOtp(payload) {
   return request("/auth/verify-otp", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `login` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Logs the user in. */
 export async function login(payload) {
   return request("/auth/login", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `getMe` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets me. */
 export async function getMe() {
   return request("/auth/me", {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `getHealth` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets health. */
 export async function getHealth() {
   return request("/health", {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `getMetrics` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets metrics. */
 export async function getMetrics() {
   return request("/metrics", {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `getTelemetry` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets telemetry. */
 export async function getTelemetry({ hours = 24 } = {}) {
   return request(`/telemetry?hours=${hours}`, {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `getDocuments` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets documents. */
 export async function getDocuments() {
   return request("/documents", {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `getDocument` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets document. */
 export async function getDocument(documentId) {
   return request(`/documents/${documentId}`, {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `deleteDocument` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Deletes document. */
 export async function deleteDocument(documentId) {
   return request(`/documents/${documentId}`, {
     method: "DELETE",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `uploadDocument` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Opens a document in a new browser tab using authenticated download. */
+export async function openDocumentView(documentId) {
+  const blob = await requestBlob(`/documents/${documentId}/view`, {
+    method: "GET",
+  });
+  const blobUrl = URL.createObjectURL(blob);
+  window.open(blobUrl, "_blank", "noopener,noreferrer");
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+}
+/** Uploads document. */
 export async function uploadDocument({ file, chunkSize = 500, chunkOverlap = 100, permissionsTags = [] }) {
   const formData = new FormData();
   formData.append("file", file);
@@ -303,53 +227,40 @@ export async function uploadDocument({ file, chunkSize = 500, chunkOverlap = 100
     body: formData,
   });
 }
+/** Uploads multiple documents. */
+export async function uploadDocumentsBatch({ files, chunkSize = 500, chunkOverlap = 100, permissionsTags = [] }) {
+  const formData = new FormData();
+  for (const file of files || []) {
+    formData.append("files", file);
+  }
+  formData.append("chunk_size", String(chunkSize));
+  formData.append("chunk_overlap", String(chunkOverlap));
+  formData.append("permissions_tags", JSON.stringify(permissionsTags));
 
-/**
- * Detailed function explanation:
- * - Purpose: `getChatSessions` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+  return request("/documents/upload-batch", {
+    method: "POST",
+    body: formData,
+  });
+}
+/** Gets chat sessions. */
 export async function getChatSessions() {
   return request("/chat/sessions", {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `getChatMessages` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets chat messages. */
 export async function getChatMessages(sessionId) {
   return request(`/chat/sessions/${sessionId}/messages`, {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `deleteChatSession` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Deletes chat session. */
 export async function deleteChatSession(sessionId) {
   return request(`/chat/sessions/${sessionId}`, {
     method: "DELETE",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `queryChat` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Sends a question to the chat API. */
 export async function queryChat({ question, limit = 5, sessionId = null }) {
   const payload = {
     question,
@@ -361,14 +272,7 @@ export async function queryChat({ question, limit = 5, sessionId = null }) {
     body: JSON.stringify(payload),
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `evaluateQualityReport` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Runs the answer quality evaluation request. */
 export async function evaluateQualityReport({ question, groundTruth = "", limit = 5, includeRagas = true }) {
   const payload = {
     question,
@@ -381,57 +285,32 @@ export async function evaluateQualityReport({ question, groundTruth = "", limit 
     body: JSON.stringify(payload),
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `getUsers` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Gets users. */
 export async function getUsers() {
   return request("/admin/users", {
     method: "GET",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `updateUserRole` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Updates user role. */
 export async function updateUserRole(userId, role) {
   return request(`/admin/users/${userId}/role`, {
     method: "PATCH",
     body: JSON.stringify({ role }),
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `deleteUser` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Deletes user. */
 export async function deleteUser(userId) {
   return request(`/admin/users/${userId}`, {
     method: "DELETE",
   });
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `updateDocumentPermissions` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Updates document permissions. */
 export async function updateDocumentPermissions(documentId, payload) {
   return request(`/admin/documents/${documentId}/permissions`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
 }
+
+
+

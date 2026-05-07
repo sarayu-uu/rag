@@ -8,16 +8,9 @@ import EmptyState from "../components/common/EmptyState";
 import SectionHeader from "../components/common/SectionHeader";
 import UploadCard from "../components/documents/UploadCard";
 import { useAuth } from "../context/AuthContext";
-import { deleteDocument, getDocuments, uploadDocument } from "../lib/api";
+import { deleteDocument, getDocuments, openDocumentView, uploadDocument, uploadDocumentsBatch } from "../lib/api";
 import { canUpload, isManagementRole } from "../lib/roles";
-
-/**
- * Detailed function explanation:
- * - Purpose: `DocumentsPage` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the documents management page. */
 export default function DocumentsPage() {
   const { user } = useAuth();
   const showUploaderColumn = isManagementRole(user?.role);
@@ -25,14 +18,8 @@ export default function DocumentsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `loadDocuments` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  const [pipelineTrace, setPipelineTrace] = useState([]);
+  /** Loads documents. */
   async function loadDocuments() {
     try {
       const response = await getDocuments();
@@ -45,21 +32,34 @@ export default function DocumentsPage() {
   useEffect(() => {
     loadDocuments();
   }, []);
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleUpload` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
-  async function handleUpload(file) {
+  /** Uploads the selected file or form data. */
+  async function handleUpload(files) {
     setBusy(true);
     setError("");
     setSuccess("");
+    setPipelineTrace([]);
     try {
-      const response = await uploadDocument({ file });
-      setSuccess(`${response.metadata?.document_name || file.name} uploaded successfully.`);
+      const selectedFiles = Array.isArray(files) ? files : [files];
+      if (selectedFiles.length === 1) {
+        const response = await uploadDocument({ file: selectedFiles[0] });
+        setSuccess(`${response.metadata?.document_name || selectedFiles[0].name} uploaded successfully. Document ID: ${response.document_id}`);
+        setPipelineTrace(response.pipeline_trace || []);
+      } else {
+        const response = await uploadDocumentsBatch({ files: selectedFiles });
+        const successIds = (response.results || [])
+          .filter((item) => item.status === "success")
+          .map((item) => item.document_id)
+          .filter((id) => id !== undefined && id !== null);
+        setSuccess(
+          `Batch upload completed. Success: ${response.success_count}, Failed: ${response.failure_count}. ` +
+            `Document IDs: ${successIds.join(", ")}`
+        );
+        setPipelineTrace([
+          "batch_upload -> /documents/upload-batch",
+          "per_file_pipeline -> load -> clean -> chunk -> embed -> index",
+          "document_ids_assigned -> one unique document_id per successful file",
+        ]);
+      }
       await loadDocuments();
     } catch (uploadError) {
       setError(uploadError.message || "Upload failed.");
@@ -67,26 +67,30 @@ export default function DocumentsPage() {
       setBusy(false);
     }
   }
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleDelete` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Deletes the selected document and refreshes the list. */
   async function handleDelete(documentId) {
     setBusy(true);
     setError("");
     setSuccess("");
+    setPipelineTrace([]);
     try {
-      await deleteDocument(documentId);
+      const response = await deleteDocument(documentId);
       setSuccess("Document deleted successfully.");
+      setPipelineTrace(response.pipeline_trace || []);
       await loadDocuments();
     } catch (deleteError) {
       setError(deleteError.message || "Delete failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleView(documentId) {
+    setError("");
+    try {
+      await openDocumentView(documentId);
+    } catch (viewError) {
+      setError(viewError.message || "Failed to open document.");
     }
   }
 
@@ -100,6 +104,14 @@ export default function DocumentsPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
       {success ? <div className="success-banner">{success}</div> : null}
+      {pipelineTrace.length ? (
+        <div className="success-banner">
+          <strong>Pipeline trace:</strong>
+          {pipelineTrace.map((step, idx) => (
+            <div key={`${idx}-${step}`}>{`${idx + 1}. ${step}`}</div>
+          ))}
+        </div>
+      ) : null}
 
       <section className="content-grid sidebar-layout">
         <UploadCard canUpload={canUpload(user?.role)} onUpload={handleUpload} busy={busy} />
@@ -140,6 +152,13 @@ export default function DocumentsPage() {
                   <span>{new Date(document.uploaded_at).toLocaleDateString()}</span>
                   <span className="documents-action-cell">
                     <button
+                      className="ghost-button"
+                      onClick={() => handleView(document.id)}
+                      disabled={busy}
+                    >
+                      View
+                    </button>
+                    <button
                       className="ghost-button danger-button documents-delete-button"
                       onClick={() => handleDelete(document.id)}
                       disabled={busy}
@@ -156,3 +175,6 @@ export default function DocumentsPage() {
     </div>
   );
 }
+
+
+

@@ -9,14 +9,7 @@ import ChatTranscript from "../components/chat/ChatTranscript";
 import SessionList from "../components/chat/SessionList";
 import SourcePanel from "../components/chat/SourcePanel";
 import { deleteChatSession, getChatMessages, getChatSessions, queryChat } from "../lib/api";
-
-/**
- * Detailed function explanation:
- * - Purpose: `ChatPage` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the main chat workspace. */
 export default function ChatPage() {
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
@@ -28,6 +21,7 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [error, setError] = useState("");
+  const [pipelineTrace, setPipelineTrace] = useState([]);
   const activeSession = sessions.find((session) => session.session_id === activeSessionId) || null;
   const activeSessionPercent = activeSession?.token_limit
     ? Math.min(100, Math.round(((activeSession?.tokens_used_total ?? 0) / Math.max(activeSession.token_limit, 1)) * 100))
@@ -36,14 +30,7 @@ export default function ChatPage() {
     Boolean(activeSessionId) &&
     Boolean(activeSession?.token_limit) &&
     Number(activeSession?.tokens_used_total ?? 0) >= Number(activeSession?.token_limit ?? 0);
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `loadSessions` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Loads sessions. */
   async function loadSessions() {
     setLoadingSessions(true);
     try {
@@ -59,14 +46,7 @@ export default function ChatPage() {
   useEffect(() => {
     loadSessions();
   }, []);
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `openSession` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Opens session. */
   async function openSession(sessionId, options = {}) {
     setLoadingMessages(true);
     setError("");
@@ -83,14 +63,7 @@ export default function ChatPage() {
       setLoadingMessages(false);
     }
   }
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `startNewChat` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Starts new chat. */
   function startNewChat() {
     setActiveSessionId(null);
     setMessages([]);
@@ -98,14 +71,7 @@ export default function ChatPage() {
     setQuestion("");
     setError("");
   }
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleDeleteSession` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Deletes the selected chat session. */
   async function handleDeleteSession(session) {
     const confirmed = window.confirm(`Delete chat session "${session.title || `Session ${session.session_id}`}"?`);
     if (!confirmed) {
@@ -130,14 +96,7 @@ export default function ChatPage() {
       setDeletingSessionId(null);
     }
   }
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleAsk` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Sends the current question to the chat flow. */
   async function handleAsk(event) {
     event.preventDefault();
     if (!question.trim() || isActiveSessionAtLimit) {
@@ -146,6 +105,7 @@ export default function ChatPage() {
 
     setSending(true);
     setError("");
+    setPipelineTrace([]);
     try {
       const response = await queryChat({
         question: question.trim(),
@@ -153,6 +113,7 @@ export default function ChatPage() {
         sessionId: activeSessionId,
       });
       setAnswerPayload(response);
+      setPipelineTrace(response.pipeline_trace || []);
       setQuestion("");
       await loadSessions();
       const nextSessionId = response.session?.session_id;
@@ -175,6 +136,14 @@ export default function ChatPage() {
       />
 
       {error ? <div className="error-banner">{error}</div> : null}
+      {pipelineTrace.length ? (
+        <div className="success-banner">
+          <strong>Pipeline trace:</strong>
+          {pipelineTrace.map((step, idx) => (
+            <div key={`${idx}-${step}`}>{`${idx + 1}. ${step}`}</div>
+          ))}
+        </div>
+      ) : null}
 
       <section className="chat-layout">
         <SessionList
@@ -221,3 +190,6 @@ export default function ChatPage() {
     </div>
   );
 }
+
+
+

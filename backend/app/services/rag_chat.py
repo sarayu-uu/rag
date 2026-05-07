@@ -16,21 +16,13 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.retrieval.service import keyword_search_chunk_text, search_chunk_text
+from app.retrieval.service import hybrid_search_chunk_text
 from app.services.chatgroq_bot import build_chat_model
 
 MAX_CONTEXT_CHARS = 12000
 OVERFETCH_MULTIPLIER = 3
-SEMANTIC_WEIGHT = 0.65
-KEYWORD_WEIGHT = 0.35
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
-
-
-# Detailed function explanation:
-# - Purpose: `_extract_token_usage` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Pulls token usage details from the model response.
 def _extract_token_usage(response: Any) -> dict[str, int]:
     usage = getattr(response, "usage_metadata", None) or {}
     if not isinstance(usage, dict):
@@ -48,11 +40,7 @@ def _extract_token_usage(response: Any) -> dict[str, int]:
 
 
 @lru_cache(maxsize=1)
-# Detailed function explanation:
-# - Purpose: `_get_prompt_environment` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Gets prompt environment.
 def _get_prompt_environment() -> Environment:
     return Environment(
         loader=FileSystemLoader(str(PROMPTS_DIR)),
@@ -61,23 +49,11 @@ def _get_prompt_environment() -> Environment:
         trim_blocks=True,
         lstrip_blocks=True,
     )
-
-
-# Detailed function explanation:
-# - Purpose: `_render_prompt` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Renders a prompt template with the current values.
 def _render_prompt(template_name: str, **context: Any) -> str:
     template = _get_prompt_environment().get_template(template_name)
     return template.render(**context).strip()
-
-
-# Detailed function explanation:
-# - Purpose: `_strip_inline_sources` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Removes inline source labels from the answer text.
 def _strip_inline_sources(answer: str) -> str:
     cleaned = (answer or "").strip()
     if not cleaned:
@@ -90,13 +66,7 @@ def _strip_inline_sources(answer: str) -> str:
         cleaned,
     ).strip()
     return cleaned
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_memory_context` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Normalizes memory context into a consistent format.
 def _normalize_memory_context(memory_context: dict[str, Any] | None) -> dict[str, Any]:
     context = memory_context or {}
     older_summary = context.get("older_summary", "")
@@ -107,13 +77,7 @@ def _normalize_memory_context(memory_context: dict[str, Any] | None) -> dict[str
         "recent_messages": recent_messages if isinstance(recent_messages, list) else [],
         "message_count": int(message_count or 0),
     }
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_match` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Normalizes match into a consistent format.
 def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
     return {
         "id": str(match.get("id", index)),
@@ -126,13 +90,7 @@ def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
         "retrieval_method": str(match.get("retrieval_method", "semantic")),
         "rerank_score": float(match.get("rerank_score", 0.0)),
     }
-
-
-# Detailed function explanation:
-# - Purpose: `_build_sources` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds sources for the next step.
 def _build_sources(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     sources: list[dict[str, Any]] = []
     for index, raw_match in enumerate(matches, start=1):
@@ -151,13 +109,7 @@ def _build_sources(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return sources
-
-
-# Detailed function explanation:
-# - Purpose: `_summarize_documents` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds a short summary of the retrieved documents.
 def _summarize_documents(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     grouped: dict[int, dict[str, Any]] = {}
     for match in matches:
@@ -187,13 +139,7 @@ def _summarize_documents(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         for summary in sorted(grouped.values(), key=lambda item: (item["best_score"], item["document_id"]))
     ]
-
-
-# Detailed function explanation:
-# - Purpose: `_select_multi_document_context` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Chooses context chunks across multiple documents.
 def _select_multi_document_context(matches: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
     grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for match in matches:
@@ -234,104 +180,7 @@ def _select_multi_document_context(matches: list[dict[str, Any]], *, limit: int)
             break
 
     return selected
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_semantic_scores` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
-def _normalize_semantic_scores(matches: list[dict[str, Any]]) -> dict[str, float]:
-    if not matches:
-        return {}
-    max_distance = max(match["score"] for match in matches) or 1.0
-    normalized: dict[str, float] = {}
-    for match in matches:
-        # Lower Chroma distance is better, so invert into a similarity-like score.
-        normalized[str(match["id"])] = max(0.0, 1.0 - (float(match["score"]) / max_distance))
-    return normalized
-
-
-# Detailed function explanation:
-# - Purpose: `_normalize_keyword_scores` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
-def _normalize_keyword_scores(matches: list[dict[str, Any]]) -> dict[str, float]:
-    if not matches:
-        return {}
-    max_score = max(match["score"] for match in matches) or 1.0
-    normalized: dict[str, float] = {}
-    for match in matches:
-        normalized[str(match["id"])] = float(match["score"]) / max_score
-    return normalized
-
-
-# Detailed function explanation:
-# - Purpose: `_rerank_hybrid_matches` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
-def _rerank_hybrid_matches(
-    semantic_matches: list[dict[str, Any]],
-    keyword_matches: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    semantic_scores = _normalize_semantic_scores(semantic_matches)
-    keyword_scores = _normalize_keyword_scores(keyword_matches)
-    merged: dict[str, dict[str, Any]] = {}
-
-    for match in semantic_matches:
-        match_id = str(match["id"])
-        merged[match_id] = {
-            **match,
-            "retrieval_method": "semantic",
-            "semantic_score": semantic_scores.get(match_id, 0.0),
-            "keyword_score": keyword_scores.get(match_id, 0.0),
-        }
-
-    for match in keyword_matches:
-        match_id = str(match["id"])
-        if match_id in merged:
-            merged[match_id]["keyword_score"] = keyword_scores.get(match_id, 0.0)
-            merged[match_id]["retrieval_method"] = "hybrid"
-            continue
-
-        merged[match_id] = {
-            **match,
-            "semantic_score": semantic_scores.get(match_id, 0.0),
-            "keyword_score": keyword_scores.get(match_id, 0.0),
-        }
-
-    reranked: list[dict[str, Any]] = []
-    for item in merged.values():
-        content_bonus = min(len(item.get("content", "")) / 1000.0, 0.15)
-        rerank_score = (
-            item.get("semantic_score", 0.0) * SEMANTIC_WEIGHT
-            + item.get("keyword_score", 0.0) * KEYWORD_WEIGHT
-            + content_bonus
-        )
-        reranked.append(
-            {
-                **item,
-                "rerank_score": rerank_score,
-            }
-        )
-
-    reranked.sort(
-        key=lambda item: (
-            -item["rerank_score"],
-            item["document_id"],
-            item["chunk_index"],
-        )
-    )
-    return reranked
-
-
-# Detailed function explanation:
-# - Purpose: `answer_question_from_matches` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Answers question from matches.
 def answer_question_from_matches(
     question: str,
     matches: list[dict[str, Any]],
@@ -341,8 +190,8 @@ def answer_question_from_matches(
     cleaned_question = question.strip()
     if not cleaned_question:
         raise ValueError("question must not be empty.")
-
     normalized_matches = [_normalize_match(match, index) for index, match in enumerate(matches, start=1)]
+    # take only matches that have content
     usable_matches = [match for match in normalized_matches if match["content"]]
     if not usable_matches:
         return {
@@ -351,8 +200,9 @@ def answer_question_from_matches(
             "documents_used": [],
             "match_count": 0,
         }
-
+    # give system its prompt
     system_prompt = _render_prompt("rag_system.jinja2")
+    # make user prompt
     user_prompt = _render_prompt(
         "rag_user.jinja2",
         question=cleaned_question,
@@ -361,6 +211,7 @@ def answer_question_from_matches(
     )
 
     model_start = perf_counter()
+    # gget response
     response = build_chat_model().invoke(
         [
             SystemMessage(content=system_prompt),
@@ -368,6 +219,7 @@ def answer_question_from_matches(
         ]
     )
     model_latency_ms = int((perf_counter() - model_start) * 1000)
+    # take only answer
     answer = response.content if isinstance(response.content, str) else str(response.content)
     answer = _strip_inline_sources(answer)
     token_usage = _extract_token_usage(response)
@@ -380,13 +232,7 @@ def answer_question_from_matches(
         "model_latency_ms": model_latency_ms,
         "token_usage": token_usage,
     }
-
-
-# Detailed function explanation:
-# - Purpose: `answer_question_with_retrieval` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Answers question with retrieval.
 def answer_question_with_retrieval(
     question: str,
     *,
@@ -397,32 +243,39 @@ def answer_question_with_retrieval(
 ) -> dict[str, Any]:
     retrieval_start = perf_counter()
     candidate_limit = max(limit * OVERFETCH_MULTIPLIER, limit)
-    semantic_matches = search_chunk_text(
+    retrieval_payload = hybrid_search_chunk_text(
         question,
         limit=candidate_limit,
         document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
-    keyword_matches = keyword_search_chunk_text(
-        question,
-        limit=candidate_limit,
-        document_ids=document_ids,
-        owner_user_id=owner_user_id,
-    )
-    reranked_matches = _rerank_hybrid_matches(semantic_matches, keyword_matches)
+    reranked_matches = retrieval_payload.get("matches", [])
+    # limits the number of matches i.e reranked
     selected_matches = _select_multi_document_context(reranked_matches, limit=limit)
+    # store the latency
     retrieval_latency_ms = int((perf_counter() - retrieval_start) * 1000)
+    # here llm answers the question
     result = answer_question_from_matches(
         question,
         selected_matches,
         memory_context=memory_context,
     )
+    # add extra kv pairs
     result["matches"] = selected_matches
     result["retrieved_match_count"] = len(reranked_matches)
     result["retrieval_debug"] = {
-        "semantic_match_count": len(semantic_matches),
-        "keyword_match_count": len(keyword_matches),
-        "hybrid_match_count": len(reranked_matches),
+        "semantic_match_count": int(retrieval_payload.get("semantic_match_count", 0)),
+        "keyword_match_count": int(retrieval_payload.get("keyword_match_count", 0)),
+        "hybrid_match_count": int(retrieval_payload.get("hybrid_match_count", len(reranked_matches))),
     }
     result["retrieval_latency_ms"] = retrieval_latency_ms
+    result["pipeline_trace"] = [
+        "semantic_retrieval -> app.retrieval.service.search_chunk_text (LangChain Chroma)",
+        "keyword_retrieval -> app.retrieval.service.keyword_search_chunk_text (LangChain BM25Retriever)",
+        "hybrid_fusion -> app.retrieval.service.hybrid_search_chunk_text (LangChain EnsembleRetriever)",
+        "context_select -> app.services.rag_chat._select_multi_document_context",
+        "answer_generation -> app.services.rag_chat.answer_question_from_matches",
+    ]
     return result
+
+

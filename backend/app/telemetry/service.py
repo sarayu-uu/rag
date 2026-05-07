@@ -37,29 +37,17 @@ class TelemetryWritePayload:
     error_count: int
 
 
-# Detailed function explanation:
-# - Purpose: `now_perf` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Starts a precise timer for one request so we can measure end-to-end latency.
 def now_perf() -> float:
     return perf_counter()
 
 
-# Detailed function explanation:
-# - Purpose: `elapsed_ms` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Converts the elapsed time since `start` into milliseconds for telemetry fields.
 def elapsed_ms(start: float) -> int:
     return int((perf_counter() - start) * 1000)
 
 
-# Detailed function explanation:
-# - Purpose: `classify_request_type` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Maps URL paths to a small set of request categories used in dashboards and summaries.
 def classify_request_type(path: str) -> RequestType | None:
     if path.startswith("/chat"):
         return RequestType.CHAT
@@ -70,11 +58,7 @@ def classify_request_type(path: str) -> RequestType | None:
     return None
 
 
-# Detailed function explanation:
-# - Purpose: `safe_int` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Safely parses string-like values into ints and returns None when parsing fails.
 def safe_int(value: str | None) -> int | None:
     if value is None:
         return None
@@ -84,11 +68,7 @@ def safe_int(value: str | None) -> int | None:
         return None
 
 
-# Detailed function explanation:
-# - Purpose: `estimate_token_count` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Estimates token usage from text length when exact model token data is not available.
 def estimate_token_count(text: str) -> int:
     cleaned = (text or "").strip()
     if not cleaned:
@@ -96,11 +76,7 @@ def estimate_token_count(text: str) -> int:
     return max(1, len(cleaned) // 4)
 
 
-# Detailed function explanation:
-# - Purpose: `estimate_cost` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Estimates request cost from input/output token counts using configured per-token rates.
 def estimate_cost(token_input: int, token_output: int) -> Decimal:
     return (
         Decimal(token_input) * DEFAULT_INPUT_TOKEN_COST
@@ -108,11 +84,8 @@ def estimate_cost(token_input: int, token_output: int) -> Decimal:
     ).quantize(Decimal("0.000001"))
 
 
-# Detailed function explanation:
-# - Purpose: `build_write_payload` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds one normalized telemetry payload from request path, response headers, and status.
+# This is where defaults/fallbacks are applied when some headers are missing.
 def build_write_payload(
     *,
     path: str,
@@ -163,11 +136,7 @@ def build_write_payload(
     )
 
 
-# Detailed function explanation:
-# - Purpose: `write_metric_usage` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Persists a single telemetry row into `metrics_usage` and commits immediately.
 def write_metric_usage(db: Session, payload: TelemetryWritePayload) -> None:
     row = MetricUsage(
         user_id=payload.user_id,
@@ -188,11 +157,8 @@ def write_metric_usage(db: Session, payload: TelemetryWritePayload) -> None:
     db.commit()
 
 
-# Detailed function explanation:
-# - Purpose: `_apply_scope` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Applies role-based visibility rules to telemetry queries:
+# admins/managers can see global data; other users only see their own rows.
 def _apply_scope(statement, *, current_user: User):
     role_name = current_user.role.name if current_user.role else None
     if role_name is None:
@@ -203,11 +169,8 @@ def _apply_scope(statement, *, current_user: User):
     return statement.where(MetricUsage.user_id == current_user.id), "current_user"
 
 
-# Detailed function explanation:
-# - Purpose: `build_telemetry_summary` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds the telemetry summary response for the requested time window.
+# It aggregates usage, error, latency, and cost stats, then attaches DB/vector health signals.
 def build_telemetry_summary(db: Session, *, current_user: User, hours: int = 24) -> dict[str, Any]:
     hours = max(1, min(hours, 24 * 30))
     from_ts = datetime.utcnow() - timedelta(hours=hours)
@@ -327,3 +290,5 @@ def build_telemetry_summary(db: Session, *, current_user: User, hours: int = 24)
             "sampled_at_utc": datetime.utcnow().isoformat(),
         },
     }
+
+

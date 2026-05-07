@@ -4,14 +4,7 @@
  */
 
 import { useEffect, useRef } from "react";
-
-/**
- * Detailed function explanation:
- * - Purpose: `formatTime` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Formats time. */
 function formatTime(value) {
   if (!value) {
     return "";
@@ -22,14 +15,7 @@ function formatTime(value) {
   }
   return date.toLocaleString();
 }
-
-/**
- * Detailed function explanation:
- * - Purpose: `ChatWindow` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the main chat window area. */
 export default function ChatWindow({
   sessionInfo,
   messages,
@@ -97,3 +83,6 @@ export default function ChatWindow({
     </section>
   );
 }
+
+
+

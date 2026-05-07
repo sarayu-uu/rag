@@ -7,17 +7,23 @@ File purpose:
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Any
 
 from app.config.settings import EMBEDDING_MODEL, VECTOR_DIMENSION
 
 
 @lru_cache(maxsize=1)
-# Detailed function explanation:
-# - Purpose: `_get_embedding_model` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
-def _get_embedding_model():
+# Gets embedding model.
+def _get_embedding_model() -> Any:
+    # Prefer LangChain wrapper so embedding flow can plug into LC modules
+    # while retaining FastEmbed as the concrete embedding backend.
+    try:
+        from langchain_community.embeddings import FastEmbedEmbeddings
+
+        return FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
+    except Exception:
+        pass
+
     try:
         from fastembed import TextEmbedding
     except ImportError as exc:
@@ -26,26 +32,14 @@ def _get_embedding_model():
         ) from exc
 
     return TextEmbedding(model_name=EMBEDDING_MODEL)
-
-
-# Detailed function explanation:
-# - Purpose: `_validate_vector_dimension` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Validates vector dimension before the next step.
 def _validate_vector_dimension(vector: list[float]) -> None:
     if len(vector) != VECTOR_DIMENSION:
         raise RuntimeError(
             f"Embedding dimension mismatch: expected {VECTOR_DIMENSION}, got {len(vector)}. "
             "Check EMBEDDING_MODEL and VECTOR_DIMENSION in backend/.env."
         )
-
-
-# Detailed function explanation:
-# - Purpose: `embed_texts` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Embeds texts.
 def embed_texts(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
@@ -54,18 +48,16 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     if not sanitized_texts:
         return []
 
+    # Uses FastEmbed via LangChain when available; otherwise direct fastembed.
     model = _get_embedding_model()
-    output = [vector.tolist() for vector in model.embed(sanitized_texts)]
+    if hasattr(model, "embed_documents"):
+        output = model.embed_documents(sanitized_texts)
+    else:
+        output = [vector.tolist() for vector in model.embed(sanitized_texts)]
     for vector in output:
         _validate_vector_dimension(vector)
     return output
-
-
-# Detailed function explanation:
-# - Purpose: `embed_query` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Embeds query.
 def embed_query(text: str) -> list[float]:
     query = text.strip()
     if not query:
@@ -73,3 +65,5 @@ def embed_query(text: str) -> list[float]:
 
     [vector] = embed_texts([query])
     return vector
+
+

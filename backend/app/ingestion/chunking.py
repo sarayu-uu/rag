@@ -7,7 +7,6 @@ File purpose:
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
 from typing import Any
 from uuid import uuid4
 
@@ -21,6 +20,7 @@ class ChunkingConfig:
 # Validates chunking settings before splitting text.
 # Ensures chunk size is positive, overlap is non-negative,
 # and overlap is smaller than chunk size.
+# Validates config before the next step.
 def _validate_config(config: ChunkingConfig) -> None:
     if config.chunk_size <= 0:
         raise ValueError("chunk_size must be > 0.")
@@ -31,9 +31,9 @@ def _validate_config(config: ChunkingConfig) -> None:
 
 
 
-# Creates one standardized chunk dictionary with all metadata fields
-# (document id, chunk index, source/page info, owner, permissions, and content)
-# so it can be stored consistently in DB/vector indexing flow.
+# Creates one chunk record in a standard format.
+# It bundles the chunk text together with metadata like document id,
+# page number, chunk index, owner, and permissions.
 def _make_chunk_record(
     *,
     document_id: int | None,
@@ -56,60 +56,41 @@ def _make_chunk_record(
     }
 
 
-# Split text into sentence-like units so chunks follow natural boundaries.
-_SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
-
-
-def _split_sentences(text: str) -> list[str]:
-    parts = [part.strip() for part in _SENTENCE_SPLIT_PATTERN.split(text) if part.strip()]
-    return parts if parts else ([text.strip()] if text.strip() else [])
-
-
-# Builds semantic-ish chunks by grouping related sentence units until chunk_size.
-# Overlap is applied as trailing characters from previous chunk for continuity.
 def _split_semantic_text(text: str, config: ChunkingConfig) -> list[str]:
     _validate_config(config)
     text_value = (text or "").strip()
     if not text_value:
         return []
 
-    semantic_units: list[str] = []
-    for paragraph in [part.strip() for part in text_value.split("\n\n") if part.strip()]:
-        semantic_units.extend(_split_sentences(paragraph))
+    # Prefer LangChain's splitter for safer boundary-aware chunking while
+    # keeping the same external chunk size/overlap behavior.
+    try:
+        try:
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
+        except Exception:
+            from langchain.text_splitter import RecursiveCharacterTextSplitter  # type: ignore
 
-    chunks: list[str] = []
-    current = ""
-
-    for unit in semantic_units:
-        if not current:
-            current = unit
-            continue
-
-        candidate = f"{current} {unit}".strip()
-        if len(candidate) <= config.chunk_size:
-            current = candidate
-            continue
-
-        chunks.append(current)
-        overlap_tail = current[-config.chunk_overlap :].strip() if config.chunk_overlap > 0 else ""
-        current = f"{overlap_tail} {unit}".strip() if overlap_tail else unit
-
-        if len(current) > config.chunk_size:
-            # Fallback for very large single sentence/unit.
-            chunks.append(current[: config.chunk_size].strip())
-            current = current[max(config.chunk_size - config.chunk_overlap, 1) :].strip()
-
-    if current:
-        chunks.append(current.strip())
-
-    return [chunk for chunk in chunks if chunk]
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=config.chunk_size,
+            chunk_overlap=config.chunk_overlap,
+            separators=["\n\n", "\n", ". ", " ", ""],
+            keep_separator=False,
+        )
+        chunks = splitter.split_text(text_value)
+        return [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
+    except Exception:
+        # Fallback path if LangChain text splitter modules are unavailable.
+        step = max(config.chunk_size - config.chunk_overlap, 1)
+        return [
+            text_value[start : start + config.chunk_size].strip()
+            for start in range(0, len(text_value), step)
+            if text_value[start : start + config.chunk_size].strip()
+        ]
 
 
-# Detailed function explanation:
-# - Purpose: `chunk_text` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Chunks one full text string and returns chunk records with metadata.
+# Use this when the input is plain text and not already split into pages/sections.
+# Chunks text.
 def chunk_text(
     text: str,
     *,
@@ -123,15 +104,17 @@ def chunk_text(
     Chunk plain text into semantic-style overlap-aware chunks with metadata.
     """
     cfg = config or ChunkingConfig()
+    #inside the function below semantic chunking happens
     chunks = _split_semantic_text(text, cfg)
     output: list[dict[str, Any]] = []
 
     for idx, chunk in enumerate(chunks):
-        chunk_text_value = chunk.strip()
+        chunk_text_value = chunk.strip() #the output of hcunking
         if not chunk_text_value:
             continue
 
         output.append(
+            #chunk record is being made
             _make_chunk_record(
                 document_id=document_id,
                 source_name=source_name,
@@ -146,11 +129,9 @@ def chunk_text(
     return output
 
 
-# Detailed function explanation:
-# - Purpose: `chunk_sections` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Chunks page-wise or section-wise content while keeping section metadata.
+# Use this when each input item already has its own text and page/section info.
+# Chunks sections.
 def chunk_sections(
     sections: list[dict[str, Any]],
     *,
@@ -179,7 +160,7 @@ def chunk_sections(
         section_chunks = _split_semantic_text(section_text, cfg)
 
         for chunk in section_chunks:
-            chunk_text_value = chunk.strip()
+            chunk_text_value = chunk.strip()  #the output of chunking
             if not chunk_text_value:
                 continue
 
@@ -197,5 +178,3 @@ def chunk_sections(
             global_idx += 1
 
     return output
-
-

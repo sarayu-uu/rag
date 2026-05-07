@@ -6,14 +6,7 @@
 import SectionHeader from "../components/common/SectionHeader";
 import { useAuth } from "../context/AuthContext";
 import { getRoleDefinition } from "../lib/roles";
-
-/**
- * Detailed function explanation:
- * - Purpose: `ProfilePage` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the current user profile page. */
 export default function ProfilePage() {
   const { user } = useAuth();
   const role = getRoleDefinition(user?.role);
@@ -68,3 +61,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+

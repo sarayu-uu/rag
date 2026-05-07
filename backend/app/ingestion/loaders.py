@@ -7,38 +7,73 @@ File purpose:
 from pathlib import Path
 import subprocess
 import tempfile
-from typing import Union
+from typing import Any, Union
 
-# PDF
+# PDF fallback
 import fitz  # PyMuPDF
 
-# DOCX
+# DOCX fallback
 from docx import Document
 
-# PPTX
+# PPTX fallback
 from pptx import Presentation
 
-# Image OCR
+# Image OCR fallback
 from PIL import Image
 import pytesseract
 
-# CSV
+# CSV fallback
 import pandas as pd
 
-# Web
+# Web fallback
 import requests
 from bs4 import BeautifulSoup
 
-# JSON
+# JSON/XML fallback
 import json
 import xml.etree.ElementTree as ET
 
 
-# Detailed function explanation:
-# - Purpose: `_run_powershell_office_conversion` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+def _extract_page_number(metadata: dict[str, Any]) -> int | None:
+    for key in ("page", "page_number"):
+        value = metadata.get(key)
+        if isinstance(value, int):
+            return value + 1 if key == "page" and value >= 0 else value
+        if isinstance(value, str) and value.isdigit():
+            num = int(value)
+            return num + 1 if key == "page" and num >= 0 else num
+    return None
+
+
+def _documents_to_text(documents: list[Any]) -> str:
+    parts: list[str] = []
+    for doc in documents:
+        value = str(getattr(doc, "page_content", "") or "").strip()
+        if value:
+            parts.append(value)
+    return "\n".join(parts)
+
+
+def _load_documents_with_langchain(loader_name: str, *args: Any, **kwargs: Any) -> list[Any] | None:
+    try:
+        from langchain_community import document_loaders as lc_loaders
+    except Exception:
+        return None
+
+    loader_cls = getattr(lc_loaders, loader_name, None)
+    if loader_cls is None:
+        return None
+
+    try:
+        loader = loader_cls(*args, **kwargs)
+        if hasattr(loader, "load"):
+            return loader.load()
+    except Exception:
+        return None
+    return None
+
+
+# Runs powershell office conversion.
 def _run_powershell_office_conversion(
     script: str,
     source_path: Path,
@@ -69,40 +104,35 @@ def _run_powershell_office_conversion(
         raise ValueError(f"Legacy Office file conversion failed: {details}") from exc
 
 
-# Detailed function explanation:
-# - Purpose: `load_pdf` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads pdf.
 def load_pdf(file_path: Union[str, Path]) -> str:
     sections = load_pdf_sections(file_path)
     return "\n".join(section["text"] for section in sections)
 
 
-# Detailed function explanation:
-# - Purpose: `load_pdf_sections` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads pdf sections.
 def load_pdf_sections(file_path: Union[str, Path]) -> list[dict[str, Union[int, str]]]:
+    path = str(file_path)
+
+    docs = _load_documents_with_langchain("PyPDFLoader", path)
+    if docs is not None:
+        sections: list[dict[str, Union[int, str]]] = []
+        for idx, doc in enumerate(docs, start=1):
+            text = str(getattr(doc, "page_content", "") or "")
+            metadata = getattr(doc, "metadata", {}) or {}
+            page_number = _extract_page_number(metadata) or idx
+            sections.append({"page_number": page_number, "text": text})
+        return sections
+
     doc = fitz.open(file_path)
-    sections: list[dict[str, Union[int, str]]] = []
+    sections = []
     for page_index, page in enumerate(doc, start=1):
-        sections.append(
-            {
-                "page_number": page_index,
-                "text": page.get_text(),
-            }
-        )
+        sections.append({"page_number": page_index, "text": page.get_text()})
     doc.close()
     return sections
 
 
-# Detailed function explanation:
-# - Purpose: `load_doc` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads doc.
 def load_doc(file_path: Union[str, Path]) -> str:
     source_path = Path(file_path)
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -127,12 +157,13 @@ def load_doc(file_path: Union[str, Path]) -> str:
         return load_docx(converted_path)
 
 
-# Detailed function explanation:
-# - Purpose: `load_docx` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads docx.
 def load_docx(file_path: Union[str, Path]) -> str:
+    path = str(file_path)
+    docs = _load_documents_with_langchain("Docx2txtLoader", path)
+    if docs is not None:
+        return _documents_to_text(docs)
+
     doc = Document(file_path)
     text = ""
     for para in doc.paragraphs:
@@ -140,11 +171,7 @@ def load_docx(file_path: Union[str, Path]) -> str:
     return text
 
 
-# Detailed function explanation:
-# - Purpose: `load_ppt` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads ppt.
 def load_ppt(file_path: Union[str, Path]) -> str:
     source_path = Path(file_path)
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -168,12 +195,13 @@ def load_ppt(file_path: Union[str, Path]) -> str:
         return load_pptx(converted_path)
 
 
-# Detailed function explanation:
-# - Purpose: `load_pptx` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads pptx.
 def load_pptx(file_path: Union[str, Path]) -> str:
+    path = str(file_path)
+    docs = _load_documents_with_langchain("UnstructuredPowerPointLoader", path)
+    if docs is not None:
+        return _documents_to_text(docs)
+
     prs = Presentation(file_path)
     text = ""
     for slide in prs.slides:
@@ -183,23 +211,25 @@ def load_pptx(file_path: Union[str, Path]) -> str:
     return text
 
 
-# Detailed function explanation:
-# - Purpose: `load_image` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads image.
 def load_image(file_path: Union[str, Path]) -> str:
+    path = str(file_path)
+    docs = _load_documents_with_langchain("UnstructuredImageLoader", path)
+    if docs is not None:
+        return _documents_to_text(docs)
+
     img = Image.open(file_path)
     text = pytesseract.image_to_string(img)
     return text
 
 
-# Detailed function explanation:
-# - Purpose: `load_csv` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads csv.
 def load_csv(file_path: Union[str, Path]) -> str:
+    path = str(file_path)
+    docs = _load_documents_with_langchain("CSVLoader", path)
+    if docs is not None:
+        return _documents_to_text(docs)
+
     df = pd.read_csv(file_path)
     text = ""
     for _, row in df.iterrows():
@@ -208,22 +238,23 @@ def load_csv(file_path: Union[str, Path]) -> str:
     return text
 
 
-# Detailed function explanation:
-# - Purpose: `load_txt` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads txt.
 def load_txt(file_path: Union[str, Path]) -> str:
+    path = str(file_path)
+    docs = _load_documents_with_langchain("TextLoader", path, encoding="utf-8")
+    if docs is not None:
+        return _documents_to_text(docs)
+
     with open(file_path, "r", encoding="utf-8", errors="replace") as f:
         return f.read()
 
 
-# Detailed function explanation:
-# - Purpose: `load_web` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads web.
 def load_web(url: str) -> str:
+    docs = _load_documents_with_langchain("WebBaseLoader", web_paths=[url])
+    if docs is not None:
+        return _documents_to_text(docs)
+
     response = requests.get(url, timeout=20)
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")
@@ -234,33 +265,31 @@ def load_web(url: str) -> str:
     return soup.get_text(separator="\n")
 
 
-# Detailed function explanation:
-# - Purpose: `load_json` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads json.
 def load_json(file_path: Union[str, Path]) -> str:
+    path = str(file_path)
+    docs = _load_documents_with_langchain(
+        "JSONLoader",
+        path,
+        jq_schema=".",
+        text_content=False,
+    )
+    if docs is not None:
+        return _documents_to_text(docs)
+
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     return json.dumps(data, indent=2)
 
 
-# Detailed function explanation:
-# - Purpose: `load_xml` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Loads xml.
 def load_xml(file_path: Union[str, Path]) -> str:
     tree = ET.parse(file_path)
     root = tree.getroot()
 
     parts: list[str] = []
 
-    # Detailed function explanation:
-    # - Purpose: `walk` handles one focused step of this module's workflow.
-    # - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-    # - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-    #   (or raises a clear exception) so downstream code can continue reliably.
+    # Walks through XML elements and collects their text and attributes.
     def walk(element: ET.Element, path: str) -> None:
         current_path = f"{path}/{element.tag}" if path else element.tag
 

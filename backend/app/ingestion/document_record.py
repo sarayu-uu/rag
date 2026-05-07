@@ -17,11 +17,10 @@ from sqlalchemy.orm import Session
 from app.models.mysql import Document, DocumentChunk, DocumentStatus
 
 
-# Detailed function explanation:
-# - Purpose: `build_document_record_payload` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Builds one document payload dictionary before saving to MySQL.
+# It collects the main metadata like title, file type, storage path,
+# uploader, status, and optional page numbers.
+# Builds document record payload for the next step.
 def build_document_record_payload(
     *,
     source: str,
@@ -29,6 +28,7 @@ def build_document_record_payload(
     file_type: str,
     upload_user_id: int | None,
     source_url: str | None,
+    file_hash: str | None = None,
     document_name: str | None = None,
     page_numbers: list[int] | None = None,
 ) -> dict[str, Any]:
@@ -43,6 +43,7 @@ def build_document_record_payload(
         "file_type": file_type,
         "storage_path": storage_path,
         "source_url": source_url,
+        "file_hash": file_hash,
         "upload_user_id": upload_user_id,
         "uploaded_at": now.isoformat(),
         "status": "uploaded",
@@ -50,11 +51,10 @@ def build_document_record_payload(
     }
 
 
-# Detailed function explanation:
-# - Purpose: `save_document_record` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Saves one document row into the `documents` table.
+# It takes the prepared payload, creates a Document model object,
+# stores it in the current DB session, and returns that document object.
+# Saves document record.
 def save_document_record(db: Session, payload: dict[str, Any]) -> Document:
     """
     DB-ready helper for when DB integration is enabled.
@@ -74,6 +74,7 @@ def save_document_record(db: Session, payload: dict[str, Any]) -> Document:
         file_type=payload["file_type"],
         storage_path=payload["storage_path"],
         source_url=payload.get("source_url"),
+        file_hash=payload.get("file_hash"),
         upload_user_id=payload["upload_user_id"],
         status=status,
     )
@@ -83,11 +84,9 @@ def save_document_record(db: Session, payload: dict[str, Any]) -> Document:
     return document
 
 
-# Detailed function explanation:
-# - Purpose: `replace_document_chunks` handles one focused step of this module's workflow.
-# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
-# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
-#   (or raises a clear exception) so downstream code can continue reliably.
+# Replaces all chunks for one document with a new chunk list.
+# First it deletes old chunk rows for that document, then inserts
+# the latest chunk records and returns the saved chunk objects.
 def replace_document_chunks(
     db: Session,
     *,
@@ -115,4 +114,5 @@ def replace_document_chunks(
 
     db.flush()
     return saved_chunks
+
 

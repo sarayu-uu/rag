@@ -8,14 +8,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { evaluateQualityReport } from "../../lib/api";
 import { useAuth } from "../../context/AuthContext";
-
-/**
- * Detailed function explanation:
- * - Purpose: `SourcePanel` handles a specific UI/data responsibility in this file.
- * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
- * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
- *   predictable UI output or data transformations used by the next step.
- */
+/** Renders the retrieved source list. */
 export default function SourcePanel({ answerPayload }) {
   const { user } = useAuth();
   const [hoveredCitation, setHoveredCitation] = useState(null);
@@ -38,14 +31,7 @@ export default function SourcePanel({ answerPayload }) {
     const preview = String(match.content || "").replace(/\s+/g, " ").trim();
     citationPreviewByKey.set(key, preview);
   });
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `computePopoverPosition` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Computes popover position. */
   function computePopoverPosition(rect) {
     const popupWidth = Math.min(460, Math.floor(window.innerWidth * 0.72));
     const popupHeight = 220;
@@ -63,14 +49,7 @@ export default function SourcePanel({ answerPayload }) {
 
     return { top, left };
   }
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `showCitationPopover` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Shows citation popover. */
   function showCitationPopover(event, preview) {
     const rect = event.currentTarget.getBoundingClientRect();
     const position = computePopoverPosition(rect);
@@ -80,14 +59,7 @@ export default function SourcePanel({ answerPayload }) {
       left: position.left,
     });
   }
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `moveCitationPopover` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Moves citation popover. */
   function moveCitationPopover(event) {
     if (!hoveredCitation) {
       return;
@@ -104,14 +76,7 @@ export default function SourcePanel({ answerPayload }) {
         : previous
     );
   }
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `hideCitationPopover` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Hides citation popover. */
   function hideCitationPopover() {
     setHoveredCitation(null);
   }
@@ -120,14 +85,7 @@ export default function SourcePanel({ answerPayload }) {
     setQualityReport(null);
     setReportError("");
   }, [answerPayload?.question]);
-
-  /**
-   * Detailed function explanation:
-   * - Purpose: `handleGenerateQualityReport` handles a specific UI/data responsibility in this file.
-   * - Usage in flow: It is called by React rendering, event handlers, or API workflows for this feature.
-   * - Input/Output intent: Receives props/state/input values, applies feature logic, and returns
-   *   predictable UI output or data transformations used by the next step.
-   */
+  /** Runs the quality report from the source panel. */
   async function handleGenerateQualityReport() {
     const question = String(answerPayload?.question || "").trim();
     if (!question) {
@@ -269,3 +227,6 @@ export default function SourcePanel({ answerPayload }) {
     </>
   );
 }
+
+
+
