@@ -355,6 +355,68 @@ def ensure_schema_updates() -> None:
                 )
             )
 
+        if "permissions" in table_names:
+            if "user_id_nn" not in permission_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE permissions "
+                        "ADD COLUMN user_id_nn INT NOT NULL DEFAULT -1"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "UPDATE permissions SET user_id_nn = IFNULL(user_id, -1)"
+                    )
+                )
+
+            if "role_id_nn" not in permission_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE permissions "
+                        "ADD COLUMN role_id_nn INT NOT NULL DEFAULT -1"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "UPDATE permissions SET role_id_nn = IFNULL(role_id, -1)"
+                    )
+                )
+
+            if "uq_permissions_doc_user_role_nn" not in permission_indexes:
+                connection.execute(
+                    text(
+                        "ALTER TABLE permissions "
+                        "ADD CONSTRAINT uq_permissions_doc_user_role_nn "
+                        "UNIQUE (document_id, user_id_nn, role_id_nn)"
+                    )
+                )
+
+            if "permissions_bi_set_nn" not in trigger_names:
+                connection.execute(
+                    text(
+                        "CREATE TRIGGER permissions_bi_set_nn "
+                        "BEFORE INSERT ON permissions "
+                        "FOR EACH ROW "
+                        "BEGIN "
+                        "SET NEW.user_id_nn = IFNULL(NEW.user_id, -1); "
+                        "SET NEW.role_id_nn = IFNULL(NEW.role_id, -1); "
+                        "END"
+                    )
+                )
+
+            if "permissions_bu_set_nn" not in trigger_names:
+                connection.execute(
+                    text(
+                        "CREATE TRIGGER permissions_bu_set_nn "
+                        "BEFORE UPDATE ON permissions "
+                        "FOR EACH ROW "
+                        "BEGIN "
+                        "SET NEW.user_id_nn = IFNULL(NEW.user_id, -1); "
+                        "SET NEW.role_id_nn = IFNULL(NEW.role_id, -1); "
+                        "END"
+                    )
+                )
+
 
 # Detailed function explanation:
 # - Purpose: `get_db` handles one focused step of this module's workflow.
