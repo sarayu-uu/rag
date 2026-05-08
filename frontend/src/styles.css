@@ -590,6 +590,9 @@ a {
 
 .table-shell {
   display: grid;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .table-row {
@@ -599,6 +602,12 @@ a {
   align-items: center;
   padding: 14px 8px;
   border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+.table-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .table-head {
@@ -662,6 +671,16 @@ a {
   min-width: 0;
 }
 
+.admin-manager-select {
+  max-width: 220px;
+}
+
+.admin-save-button {
+  padding: 10px 14px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
 .admin-delete-button {
   padding: 12px 14px;
   border-radius: 14px;
@@ -680,23 +699,72 @@ a {
   white-space: nowrap;
 }
 
+.admin-usage-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 21, 34, 0.75);
+}
+
+.admin-usage-block strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.admin-usage-block p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.admin-usage-block ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
 .documents-row {
-  grid-template-columns: minmax(180px, 2.2fr) minmax(90px, 0.9fr) minmax(90px, 0.9fr) minmax(110px, 1fr) minmax(90px, 0.8fr);
+  grid-template-columns: minmax(220px, 2.2fr) minmax(88px, 0.8fr) minmax(92px, 0.9fr) minmax(110px, 1fr) minmax(172px, 1.1fr);
 }
 
 .documents-row.with-uploader {
-  grid-template-columns: minmax(180px, 2fr) minmax(90px, 0.8fr) minmax(180px, 1.4fr) minmax(90px, 0.85fr) minmax(110px, 0.9fr) minmax(90px, 0.7fr);
+  grid-template-columns: minmax(220px, 1.8fr) minmax(88px, 0.7fr) minmax(220px, 1.5fr) minmax(92px, 0.75fr) minmax(110px, 0.85fr) minmax(172px, 1.1fr);
+}
+
+.documents-row > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .documents-action-cell {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.documents-view-button {
+  padding: 9px 14px;
+  border-radius: 12px;
+  min-width: 120px;
+  white-space: nowrap;
+  background: rgba(91, 166, 255, 0.12);
+  border-color: rgba(91, 166, 255, 0.24);
+  color: #d9e9ff;
+}
+
+.documents-view-button:hover:not(:disabled) {
+  background: rgba(91, 166, 255, 0.2);
 }
 
 .documents-delete-button {
   padding: 9px 12px;
   border-radius: 12px;
-  min-width: 90px;
+  min-width: 84px;
   white-space: nowrap;
   background: rgba(255, 107, 107, 0.1);
   border-color: rgba(255, 107, 107, 0.18);
@@ -804,8 +872,8 @@ button:disabled {
   grid-template-columns: 320px minmax(0, 1.2fr) 380px;
   gap: 18px;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
+  height: auto;
+  overflow: visible;
 }
 
 .chat-layout > * {
@@ -822,7 +890,8 @@ button:disabled {
   height: 100%;
   min-height: 0;
   grid-template-rows: auto auto minmax(0, 1fr);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .chat-page .chat-layout {
@@ -840,13 +909,14 @@ button:disabled {
 
 .transcript-card {
   grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: visible;
 }
 
 .session-list {
   display: grid;
   gap: 10px;
   min-height: 0;
-  overflow-y: auto;
+  overflow: visible;
   align-content: start;
 }
 
@@ -923,8 +993,7 @@ button:disabled {
   display: grid;
   gap: 14px;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
   padding-right: 4px;
 }
 
@@ -999,7 +1068,7 @@ button:disabled {
 .source-aggregate {
   min-height: 0;
   max-height: 100%;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .source-note {
@@ -1070,6 +1139,34 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.message-content {
+  display: grid;
+  gap: 8px;
+}
+
+.message-bullet-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 4px;
+}
+
+.message-code-block {
+  margin: 0.45rem 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(6, 17, 28, 0.95);
+  overflow-x: auto;
+}
+
+.message-code-block code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: #d7e9ff;
+}
+
 .message-bubble header {
   display: flex;
   justify-content: space-between;
@@ -1103,6 +1200,63 @@ button:disabled {
 .source-row small,
 .session-row small {
   color: var(--muted);
+}
+
+.document-filter-box {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: rgba(8, 22, 36, 0.5);
+}
+
+.document-filter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.document-filter-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.document-filter-action {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 0.76rem;
+  line-height: 1.1;
+}
+
+.document-filter-list {
+  display: grid;
+  gap: 4px;
+  max-height: 110px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.document-filter-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  padding: 2px 0;
+  font-size: 0.88rem;
+}
+
+.document-filter-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-filter-item input[type="checkbox"] {
+  width: auto;
+  margin: 0;
 }
 
 .profile-grid {
@@ -1279,6 +1433,14 @@ button:disabled {
   .content-grid.two-up,
   .content-grid.sidebar-layout {
     grid-template-columns: 1fr;
+  }
+
+  .documents-row {
+    grid-template-columns: minmax(200px, 2fr) minmax(78px, 0.7fr) minmax(82px, 0.7fr) minmax(92px, 0.75fr) minmax(152px, 0.95fr);
+  }
+
+  .documents-row.with-uploader {
+    grid-template-columns: minmax(200px, 1.7fr) minmax(78px, 0.6fr) minmax(180px, 1.2fr) minmax(82px, 0.65fr) minmax(92px, 0.7fr) minmax(152px, 0.95fr);
   }
 
   .session-row {

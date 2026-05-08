@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth.security import (
@@ -40,7 +40,7 @@ class SignupRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str = Field(..., min_length=5, max_length=255)
+    email: str = Field(..., min_length=1, max_length=255, description="Email or username")
     password: str = Field(..., min_length=1, max_length=128)
 
 
@@ -85,6 +85,22 @@ def _get_user_by_email(db: Session, email: str) -> User | None:
         select(User)
         .options(joinedload(User.role))
         .where(User.email == email.strip().lower())
+    )
+
+
+def _get_user_by_login_identifier(db: Session, identifier: str) -> User | None:
+    normalized = identifier.strip()
+    if not normalized:
+        return None
+    return db.scalar(
+        select(User)
+        .options(joinedload(User.role))
+        .where(
+            or_(
+                User.email == normalized.lower(),
+                User.username == normalized,
+            )
+        )
     )
 
 
@@ -197,9 +213,9 @@ def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)) -> dict
 )
 # Logs the user in.
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict[str, Any]:
-    user = _get_user_by_email(db, _normalize_email(payload.email))
+    user = _get_user_by_login_identifier(db, payload.email)
     if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username/email or password.")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Verify OTP before logging in.")
 

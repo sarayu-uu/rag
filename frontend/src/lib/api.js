@@ -49,8 +49,26 @@ authStore = getStoredTokens();
 async function parseResponse(response) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = data?.detail || data?.message || `Request failed (${response.status})`;
-    const error = new Error(detail);
+    let detail = data?.detail || data?.message || `Request failed (${response.status})`;
+    if (Array.isArray(detail)) {
+      detail = detail
+        .map((item) => {
+          if (typeof item === "string") {
+            return item;
+          }
+          if (item?.msg) {
+            return item.msg;
+          }
+          return JSON.stringify(item);
+        })
+        .join("; ");
+    } else if (detail && typeof detail === "object") {
+      detail = detail.msg || detail.message || JSON.stringify(detail);
+    } else if (detail !== null && detail !== undefined) {
+      detail = String(detail);
+    }
+
+    const error = new Error(detail || `Request failed (${response.status})`);
     error.status = response.status;
     error.payload = data;
     throw error;
@@ -129,8 +147,26 @@ async function requestBlob(path, options = {}, retry = true) {
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    const detail = data?.detail || data?.message || `Request failed (${response.status})`;
-    const error = new Error(detail);
+    let detail = data?.detail || data?.message || `Request failed (${response.status})`;
+    if (Array.isArray(detail)) {
+      detail = detail
+        .map((item) => {
+          if (typeof item === "string") {
+            return item;
+          }
+          if (item?.msg) {
+            return item.msg;
+          }
+          return JSON.stringify(item);
+        })
+        .join("; ");
+    } else if (detail && typeof detail === "object") {
+      detail = detail.msg || detail.message || JSON.stringify(detail);
+    } else if (detail !== null && detail !== undefined) {
+      detail = String(detail);
+    }
+
+    const error = new Error(detail || `Request failed (${response.status})`);
     error.status = response.status;
     error.payload = data;
     throw error;
@@ -140,7 +176,7 @@ async function requestBlob(path, options = {}, retry = true) {
 }
 /** Normalizes role into a consistent format. */
 export function normalizeRole(role) {
-  return role || ROLE_KEYS.GUEST;
+  return role || ROLE_KEYS.VIEWER;
 }
 /** Signs up a new user. */
 export async function signup(payload) {
@@ -261,10 +297,11 @@ export async function deleteChatSession(sessionId) {
   });
 }
 /** Sends a question to the chat API. */
-export async function queryChat({ question, limit = 5, sessionId = null }) {
+export async function queryChat({ question, limit = 5, sessionId = null, documentIds = null }) {
   const payload = {
     question,
     limit,
+    ...(Array.isArray(documentIds) ? { document_ids: documentIds } : {}),
     ...(sessionId ? { session_id: sessionId } : {}),
   };
   return request("/chat/query", {
@@ -292,16 +329,25 @@ export async function getUsers() {
   });
 }
 /** Updates user role. */
-export async function updateUserRole(userId, role) {
+export async function updateUserRole(userId, role, managerUserId = null) {
   return request(`/admin/users/${userId}/role`, {
     method: "PATCH",
-    body: JSON.stringify({ role }),
+    body: JSON.stringify({
+      role,
+      manager_user_id: managerUserId,
+    }),
   });
 }
 /** Deletes user. */
 export async function deleteUser(userId) {
   return request(`/admin/users/${userId}`, {
     method: "DELETE",
+  });
+}
+/** Gets one user's usage insights for admin controls. */
+export async function getUserUsageDetails(userId) {
+  return request(`/admin/users/${userId}/usage`, {
+    method: "GET",
   });
 }
 /** Updates document permissions. */

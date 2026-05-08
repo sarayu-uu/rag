@@ -152,11 +152,11 @@ export default function DocumentsPage() {
                   <span>{new Date(document.uploaded_at).toLocaleDateString()}</span>
                   <span className="documents-action-cell">
                     <button
-                      className="ghost-button"
+                      className="ghost-button documents-view-button"
                       onClick={() => handleView(document.id)}
                       disabled={busy}
                     >
-                      View
+                      View document
                     </button>
                     <button
                       className="ghost-button danger-button documents-delete-button"

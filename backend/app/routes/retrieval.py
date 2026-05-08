@@ -10,10 +10,9 @@ from time import perf_counter
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.permissions import accessible_document_ids
+from app.auth.permissions import build_retrieval_scope_with_fallback
 from app.auth.security import get_current_user, is_privileged_user
 from app.models.mysql import Document, DocumentChunk, User, get_db
 from app.retrieval.service import (
@@ -48,13 +47,17 @@ def search_indexed_chunks(
     retrieval_start = perf_counter()
     try:
         ensure_vector_store_ready()
-        allowed_document_ids = accessible_document_ids(db, current_user, permission_field="can_query")
-        if allowed_document_ids is None:
-            allowed_document_ids = list(db.scalars(select(Document.id)).all())
+        retrieval_scope = build_retrieval_scope_with_fallback(
+            db,
+            current_user,
+            permission_field="can_query",
+            fallback_permission_field="can_read",
+        )
         matches = search_chunk_text(
             payload.query,
             limit=payload.limit,
-            document_ids=allowed_document_ids,
+            document_ids=retrieval_scope.document_ids,
+            owner_user_id=retrieval_scope.owner_user_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

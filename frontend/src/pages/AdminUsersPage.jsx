@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import SectionHeader from "../components/common/SectionHeader";
-import { deleteUser, getUsers, updateUserRole } from "../lib/api";
+import { deleteUser, getUserUsageDetails, getUsers, updateUserRole } from "../lib/api";
 import { ROLE_KEYS } from "../lib/roles";
 import { useAuth } from "../context/AuthContext";
 
@@ -14,7 +14,12 @@ const ROLE_OPTIONS = Object.values(ROLE_KEYS);
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
+  const [roleDrafts, setRoleDrafts] = useState({});
+  const [managerDrafts, setManagerDrafts] = useState({});
   const [busyUserId, setBusyUserId] = useState(null);
+  const [usageBusyUserId, setUsageBusyUserId] = useState(null);
+  const [usageOpenUserId, setUsageOpenUserId] = useState(null);
+  const [usagePanel, setUsagePanel] = useState({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   /** Loads users. */
@@ -30,13 +35,36 @@ export default function AdminUsersPage() {
   useEffect(() => {
     loadUsers();
   }, []);
+  useEffect(() => {
+    setRoleDrafts((prev) => {
+      const next = { ...prev };
+      for (const item of users) {
+        if (!next[item.id]) {
+          next[item.id] = item.role;
+        }
+      }
+      return next;
+    });
+    setManagerDrafts((prev) => {
+      const next = { ...prev };
+      for (const item of users) {
+        if (next[item.id] === undefined) {
+          next[item.id] = item.manager_user_id ?? "";
+        }
+      }
+      return next;
+    });
+  }, [users]);
   /** Updates a user role from the admin page. */
-  async function handleRoleChange(userId, role) {
+  async function handleRoleChange(userId) {
     setBusyUserId(userId);
     setError("");
     setSuccess("");
     try {
-      await updateUserRole(userId, role);
+      const role = roleDrafts[userId];
+      const managerUserIdRaw = managerDrafts[userId];
+      const managerUserId = role === ROLE_KEYS.ANALYST && managerUserIdRaw !== "" ? Number(managerUserIdRaw) : null;
+      await updateUserRole(userId, role, managerUserId);
       setSuccess("User role updated successfully.");
       await loadUsers();
     } catch (roleError) {
@@ -66,7 +94,32 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleToggleUsage(userId) {
+    if (usageOpenUserId === userId) {
+      setUsageOpenUserId(null);
+      return;
+    }
+
+    setError("");
+    if (!usagePanel[userId]) {
+      setUsageBusyUserId(userId);
+      try {
+        const response = await getUserUsageDetails(userId);
+        setUsagePanel((prev) => ({ ...prev, [userId]: response }));
+      } catch (usageError) {
+        setError(usageError.message || "Failed to load user usage.");
+        return;
+      } finally {
+        setUsageBusyUserId(null);
+      }
+    }
+    setUsageOpenUserId(userId);
+  }
+
   const canDeleteUsers = currentUser?.role === ROLE_KEYS.ADMIN;
+  const isAdmin = currentUser?.role === ROLE_KEYS.ADMIN;
+  const isUsageAdmin = currentUser?.role === ROLE_KEYS.ADMIN;
+  const managerUsers = users.filter((item) => item.role === ROLE_KEYS.MANAGER);
 
   return (
     <div className="page-stack">
@@ -85,7 +138,7 @@ export default function AdminUsersPage() {
             <span>User</span>
             <span>Email</span>
             <span>Role</span>
-            <span>Status</span>
+            <span>Usage</span>
             <span>Controls</span>
           </div>
           {users.map((user) => (
@@ -98,16 +151,24 @@ export default function AdminUsersPage() {
                 <span className="role-chip admin-role-chip">{user.role}</span>
               </span>
               <span>
-                <span className={`status-chip admin-status-chip ${user.is_active ? "is-active" : "is-pending"}`}>
-                  <span className={`status-dot admin-status-dot ${user.is_active ? "is-active" : "is-pending"}`} />
-                  {user.is_active ? "Active" : "Pending"}
-                </span>
+                {isUsageAdmin ? (
+                  <button
+                    type="button"
+                    className="ghost-button admin-save-button"
+                    onClick={() => handleToggleUsage(user.id)}
+                    disabled={usageBusyUserId === user.id}
+                  >
+                    {usageBusyUserId === user.id ? "Loading..." : usageOpenUserId === user.id ? "Hide Usage" : "Usage"}
+                  </button>
+                ) : (
+                  <span className="admin-user-meta">Unavailable</span>
+                )}
               </span>
               <div className="admin-user-actions">
                 <select
-                  defaultValue={user.role}
+                  value={roleDrafts[user.id] || user.role}
                   className="admin-role-select"
-                  onChange={(event) => handleRoleChange(user.id, event.target.value)}
+                  onChange={(event) => setRoleDrafts((value) => ({ ...value, [user.id]: event.target.value }))}
                   disabled={busyUserId === user.id}
                 >
                   {ROLE_OPTIONS.map((role) => (
@@ -116,6 +177,32 @@ export default function AdminUsersPage() {
                     </option>
                   ))}
                 </select>
+                {isAdmin && (roleDrafts[user.id] || user.role) === ROLE_KEYS.ANALYST ? (
+                  <select
+                    value={managerDrafts[user.id] ?? ""}
+                    className="admin-role-select admin-manager-select"
+                    onChange={(event) => setManagerDrafts((value) => ({ ...value, [user.id]: event.target.value }))}
+                    disabled={busyUserId === user.id}
+                  >
+                    <option value="">Select manager</option>
+                    {managerUsers.map((manager) => (
+                      <option key={manager.id} value={manager.id}>
+                        {manager.username} ({manager.email})
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <button
+                  type="button"
+                  className="ghost-button admin-save-button"
+                  onClick={() => handleRoleChange(user.id)}
+                  disabled={
+                    busyUserId === user.id ||
+                    (isAdmin && (roleDrafts[user.id] || user.role) === ROLE_KEYS.ANALYST && !managerDrafts[user.id])
+                  }
+                >
+                  {busyUserId === user.id ? "Saving..." : "Save"}
+                </button>
                 {canDeleteUsers && user.role !== ROLE_KEYS.ADMIN ? (
                   <button
                     type="button"
@@ -129,6 +216,46 @@ export default function AdminUsersPage() {
                   <span className="admin-user-meta">{user.role === ROLE_KEYS.ADMIN ? "Protected" : "Unavailable"}</span>
                 )}
               </div>
+              {isUsageAdmin && usageOpenUserId === user.id && usagePanel[user.id] ? (
+                <div className="admin-usage-panel">
+                  <div className="admin-usage-block">
+                    <strong>1) Total tokens spent by the user</strong>
+                    <p>
+                      {usagePanel[user.id].total_tokens_spent ?? 0} tokens
+                      {" | "}
+                      ${Number(usagePanel[user.id].total_estimated_cost_usd ?? 0).toFixed(6)}
+                    </p>
+                  </div>
+                  <div className="admin-usage-block">
+                    <strong>2) See his/her documents</strong>
+                    {usagePanel[user.id].documents?.length ? (
+                      <ul>
+                        {usagePanel[user.id].documents.map((doc) => (
+                          <li key={doc.id}>
+                            {doc.title} ({doc.file_type})
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No documents found.</p>
+                    )}
+                  </div>
+                  <div className="admin-usage-block">
+                    <strong>3) See his/her chats</strong>
+                    {usagePanel[user.id].chats?.length ? (
+                      <ul>
+                        {usagePanel[user.id].chats.map((chat) => (
+                          <li key={chat.session_id}>
+                            {chat.title || `Session ${chat.session_id}`} - {chat.messages?.length || 0} messages
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No chats found.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
@@ -136,6 +263,3 @@ export default function AdminUsersPage() {
     </div>
   );
 }
-
-
-

@@ -6,7 +6,6 @@ File purpose:
 
 from __future__ import annotations
 
-from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
 import re
@@ -15,6 +14,7 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from langchain_core.messages import HumanMessage, SystemMessage
+from langsmith import traceable
 
 from app.retrieval.service import hybrid_search_chunk_text
 from app.services.chatgroq_bot import build_chat_model
@@ -22,6 +22,12 @@ from app.services.chatgroq_bot import build_chat_model
 MAX_CONTEXT_CHARS = 12000
 OVERFETCH_MULTIPLIER = 3
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
+STOP_WORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "i", "if", "in", "is",
+    "it", "me", "of", "on", "or", "please", "show", "that", "the", "this", "to", "what", "when",
+    "where", "which", "with", "you", "your",
+}
+MIN_RERANK_SCORE = 0.08
 # Pulls token usage details from the model response.
 def _extract_token_usage(response: Any) -> dict[str, int]:
     usage = getattr(response, "usage_metadata", None) or {}
@@ -90,6 +96,42 @@ def _normalize_match(match: dict[str, Any], index: int) -> dict[str, Any]:
         "retrieval_method": str(match.get("retrieval_method", "semantic")),
         "rerank_score": float(match.get("rerank_score", 0.0)),
     }
+
+
+def _extract_query_terms(question: str) -> set[str]:
+    tokens = re.findall(r"[a-zA-Z0-9_]+", question.lower())
+    terms = {token for token in tokens if len(token) > 2 and token not in STOP_WORDS}
+    return terms
+
+
+def _filter_relevant_matches(question: str, matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    terms = _extract_query_terms(question)
+    if not terms:
+        return matches
+
+    filtered: list[dict[str, Any]] = []
+    for match in matches:
+        content = str(match.get("content", "")).lower()
+        overlap = sum(1 for term in terms if term in content)
+        if overlap > 0:
+            filtered.append(match)
+
+    # If filtering is too strict, fall back to original matches.
+    return filtered if filtered else matches
+
+
+def _build_formatting_instruction(question: str) -> str:
+    text = question.lower()
+    wants_code = any(keyword in text for keyword in {"code", "syntax", "snippet", "program", "example code"})
+    wants_bullets = any(keyword in text for keyword in {"bullet", "points", "list", "steps"})
+
+    if wants_code and wants_bullets:
+        return "Use concise bullet points, and include code examples in fenced Markdown code blocks."
+    if wants_code:
+        return "If code is relevant, format it in fenced Markdown code blocks with a language tag."
+    if wants_bullets:
+        return "Format the answer as concise bullet points."
+    return "Use clear paragraph format unless the user explicitly asks for a different structure."
 # Builds sources for the next step.
 def _build_sources(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     sources: list[dict[str, Any]] = []
@@ -140,47 +182,45 @@ def _summarize_documents(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for summary in sorted(grouped.values(), key=lambda item: (item["best_score"], item["document_id"]))
     ]
 # Chooses context chunks across multiple documents.
-def _select_multi_document_context(matches: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
-    grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    for match in matches:
-        grouped[int(match["document_id"])].append(match)
+def _select_ranked_context(question: str, matches: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    # Keep only matches that look relevant enough.
+    filtered = _filter_relevant_matches(question, matches)
+    ranked = sorted(
+        filtered,
+        key=lambda item: (
+            -float(item.get("rerank_score", 0.0)),
+            float(item.get("score", 0.0)),
+            int(item.get("chunk_index", 0)),
+        ),
+    )
 
     selected: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     current_context_chars = 0
-
-    # Round-robin selection spreads context across documents first.
-    ordered_document_ids = sorted(
-        grouped,
-        key=lambda document_id: min(item["score"] for item in grouped[document_id]),
-    )
-    while len(selected) < limit:
-        made_progress = False
-        for document_id in ordered_document_ids:
-            if not grouped[document_id]:
-                continue
-
-            candidate = grouped[document_id].pop(0)
-            if candidate["id"] in seen_ids:
-                continue
-
-            candidate_size = len(candidate["content"])
-            if selected and current_context_chars + candidate_size > MAX_CONTEXT_CHARS:
-                continue
-
-            selected.append(candidate)
-            seen_ids.add(candidate["id"])
-            current_context_chars += candidate_size
-            made_progress = True
-
-            if len(selected) >= limit:
-                break
-
-        if not made_progress:
+    for candidate in ranked:
+        if candidate["id"] in seen_ids:
+            continue
+        if float(candidate.get("rerank_score", 0.0)) < MIN_RERANK_SCORE:
+            continue
+        candidate_size = len(candidate["content"])
+        if selected and current_context_chars + candidate_size > MAX_CONTEXT_CHARS:
+            continue
+        selected.append(candidate)
+        seen_ids.add(candidate["id"])
+        current_context_chars += candidate_size
+        if len(selected) >= limit:
             break
 
+    # Fallback in case thresholding filtered out too much.
+    if not selected:
+        for candidate in ranked[:limit]:
+            if candidate["id"] in seen_ids:
+                continue
+            selected.append(candidate)
+            seen_ids.add(candidate["id"])
     return selected
 # Answers question from matches.
+@traceable(name="rag_answer_from_matches")
 def answer_question_from_matches(
     question: str,
     matches: list[dict[str, Any]],
@@ -193,6 +233,7 @@ def answer_question_from_matches(
     normalized_matches = [_normalize_match(match, index) for index, match in enumerate(matches, start=1)]
     # take only matches that have content
     usable_matches = [match for match in normalized_matches if match["content"]]
+    usable_matches = _filter_relevant_matches(cleaned_question, usable_matches)
     if not usable_matches:
         return {
             "answer": "The retrieved documents do not contain enough information to answer this confidently.",
@@ -208,6 +249,7 @@ def answer_question_from_matches(
         question=cleaned_question,
         matches=usable_matches,
         memory_context=_normalize_memory_context(memory_context),
+        formatting_instruction=_build_formatting_instruction(cleaned_question),
     )
 
     model_start = perf_counter()
@@ -233,6 +275,7 @@ def answer_question_from_matches(
         "token_usage": token_usage,
     }
 # Answers question with retrieval.
+@traceable(name="rag_answer_with_retrieval")
 def answer_question_with_retrieval(
     question: str,
     *,
@@ -251,7 +294,7 @@ def answer_question_with_retrieval(
     )
     reranked_matches = retrieval_payload.get("matches", [])
     # limits the number of matches i.e reranked
-    selected_matches = _select_multi_document_context(reranked_matches, limit=limit)
+    selected_matches = _select_ranked_context(question, reranked_matches, limit=limit)
     # store the latency
     retrieval_latency_ms = int((perf_counter() - retrieval_start) * 1000)
     # here llm answers the question
@@ -273,7 +316,7 @@ def answer_question_with_retrieval(
         "semantic_retrieval -> app.retrieval.service.search_chunk_text (LangChain Chroma)",
         "keyword_retrieval -> app.retrieval.service.keyword_search_chunk_text (LangChain BM25Retriever)",
         "hybrid_fusion -> app.retrieval.service.hybrid_search_chunk_text (LangChain EnsembleRetriever)",
-        "context_select -> app.services.rag_chat._select_multi_document_context",
+        "context_select -> app.services.rag_chat._select_ranked_context",
         "answer_generation -> app.services.rag_chat.answer_question_from_matches",
     ]
     return result

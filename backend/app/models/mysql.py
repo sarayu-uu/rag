@@ -48,7 +48,6 @@ class RoleName(str, PyEnum):
     MANAGER = "Manager"
     ANALYST = "Analyst"
     VIEWER = "Viewer"
-    GUEST = "Guest"
 
 
 ROLE_DESCRIPTIONS: dict[RoleName, str] = {
@@ -56,7 +55,6 @@ ROLE_DESCRIPTIONS: dict[RoleName, str] = {
     RoleName.MANAGER: "Can manage team documents, users, and access rules.",
     RoleName.ANALYST: "Can ingest documents and run retrieval workflows.",
     RoleName.VIEWER: "Can view approved content and grounded answers.",
-    RoleName.GUEST: "Limited read-only access to explicitly shared resources.",
 }
 
 
@@ -107,6 +105,11 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), nullable=False)
+    manager_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
@@ -117,6 +120,17 @@ class User(Base):
     )
 
     role: Mapped["Role"] = relationship(back_populates="users")
+    manager: Mapped["User | None"] = relationship(
+        "User",
+        remote_side="User.id",
+        foreign_keys=[manager_user_id],
+        back_populates="analysts",
+    )
+    analysts: Mapped[list["User"]] = relationship(
+        "User",
+        back_populates="manager",
+        foreign_keys=[manager_user_id],
+    )
     documents: Mapped[list["Document"]] = relationship(
         back_populates="uploader",
         cascade="all, delete-orphan",
@@ -143,7 +157,6 @@ class Document(Base):
     file_type: Mapped[str] = mapped_column(String(50), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     upload_user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
@@ -302,27 +315,55 @@ class MetricUsage(Base):
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     session: Mapped["ChatSession"] = relationship(back_populates="metrics")
-# Creates database tables and seeds initial data.
+
+
+# Detailed function explanation:
+# - Purpose: `init_db` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def init_db() -> None:
     # Called during app startup.
     # Ensures schema exists, applies small backward-compatible updates,
     # and seeds mandatory reference data (roles).
     """Create all tables and seed baseline reference data."""
     Base.metadata.create_all(bind=engine)
+    remove_guest_role_if_present()
     ensure_schema_updates()
     seed_roles()
-# Ensures schema updates is ready.
+
+
+# Detailed function explanation:
+# - Purpose: `ensure_schema_updates` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def ensure_schema_updates() -> None:
     # Lightweight migration helper for local/dev databases.
     # Prevents runtime failures when code expects new columns in older DBs.
     """Apply lightweight schema updates for existing local databases."""
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
-    if "document_chunks" not in table_names and "documents" not in table_names:
+    if "document_chunks" not in table_names:
         return
 
-    chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")} if "document_chunks" in table_names else set()
-    document_columns = {column["name"] for column in inspector.get_columns("documents")} if "documents" in table_names else set()
+    chunk_columns = {column["name"] for column in inspector.get_columns("document_chunks")}
+    permission_columns: set[str] = set()
+    if "permissions" in table_names:
+        permission_columns = {column["name"] for column in inspector.get_columns("permissions")}
+    user_columns: set[str] = set()
+    if "users" in table_names:
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+
+    permission_indexes: set[str] = set()
+    if "permissions" in table_names:
+        permission_indexes = {index["name"] for index in inspector.get_indexes("permissions")}
+
+    trigger_names: set[str] = set()
+    with engine.connect() as connection:
+        trigger_rows = connection.execute(text("SHOW TRIGGERS")).fetchall()
+        trigger_names = {str(row[0]) for row in trigger_rows}
+
     with engine.begin() as connection:
         if "permissions_tags" not in chunk_columns:
             connection.execute(
@@ -331,14 +372,97 @@ def ensure_schema_updates() -> None:
                     "ADD COLUMN permissions_tags VARCHAR(2000) NOT NULL DEFAULT '[]'"
                 )
             )
-        if "file_hash" not in document_columns:
+
+        if "users" in table_names and "manager_user_id" not in user_columns:
             connection.execute(
                 text(
-                    "ALTER TABLE documents "
-                    "ADD COLUMN file_hash VARCHAR(64) NULL"
+                    "ALTER TABLE users "
+                    "ADD COLUMN manager_user_id INT NULL"
                 )
             )
-# Gets db.
+            connection.execute(
+                text(
+                    "ALTER TABLE users "
+                    "ADD INDEX ix_users_manager_user_id (manager_user_id)"
+                )
+            )
+            connection.execute(
+                text(
+                    "ALTER TABLE users "
+                    "ADD CONSTRAINT fk_users_manager_user_id "
+                    "FOREIGN KEY (manager_user_id) REFERENCES users(id) "
+                    "ON DELETE SET NULL"
+                )
+            )
+
+        if "permissions" in table_names:
+            if "user_id_nn" not in permission_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE permissions "
+                        "ADD COLUMN user_id_nn INT NOT NULL DEFAULT -1"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "UPDATE permissions SET user_id_nn = IFNULL(user_id, -1)"
+                    )
+                )
+
+            if "role_id_nn" not in permission_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE permissions "
+                        "ADD COLUMN role_id_nn INT NOT NULL DEFAULT -1"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "UPDATE permissions SET role_id_nn = IFNULL(role_id, -1)"
+                    )
+                )
+
+            if "uq_permissions_doc_user_role_nn" not in permission_indexes:
+                connection.execute(
+                    text(
+                        "ALTER TABLE permissions "
+                        "ADD CONSTRAINT uq_permissions_doc_user_role_nn "
+                        "UNIQUE (document_id, user_id_nn, role_id_nn)"
+                    )
+                )
+
+            if "permissions_bi_set_nn" not in trigger_names:
+                connection.execute(
+                    text(
+                        "CREATE TRIGGER permissions_bi_set_nn "
+                        "BEFORE INSERT ON permissions "
+                        "FOR EACH ROW "
+                        "BEGIN "
+                        "SET NEW.user_id_nn = IFNULL(NEW.user_id, -1); "
+                        "SET NEW.role_id_nn = IFNULL(NEW.role_id, -1); "
+                        "END"
+                    )
+                )
+
+            if "permissions_bu_set_nn" not in trigger_names:
+                connection.execute(
+                    text(
+                        "CREATE TRIGGER permissions_bu_set_nn "
+                        "BEFORE UPDATE ON permissions "
+                        "FOR EACH ROW "
+                        "BEGIN "
+                        "SET NEW.user_id_nn = IFNULL(NEW.user_id, -1); "
+                        "SET NEW.role_id_nn = IFNULL(NEW.role_id, -1); "
+                        "END"
+                    )
+                )
+
+
+# Detailed function explanation:
+# - Purpose: `get_db` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_db() -> Generator[Session, None, None]:
     # FastAPI dependency provider.
     # Opens one DB session per request and guarantees cleanup afterwards.
@@ -348,14 +472,26 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-# Checks db connection.
+
+
+# Detailed function explanation:
+# - Purpose: `check_db_connection` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def check_db_connection() -> None:
     # Used by health endpoint/startup diagnostics to verify DB reachability.
     # Raises immediately if connection is broken/misconfigured.
     """Raise if the configured database is unreachable."""
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
-# Seeds roles.
+
+
+# Detailed function explanation:
+# - Purpose: `seed_roles` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def seed_roles() -> None:
     # Ensures required RBAC roles exist in every environment.
     # Safe to run repeatedly because it inserts only missing roles.
@@ -373,7 +509,45 @@ def seed_roles() -> None:
 
         db.add_all(missing_roles)
         db.commit()
-# Gets or create default ingestion user.
+
+
+def remove_guest_role_if_present() -> None:
+    """
+    Migrate legacy Guest role usage to Viewer and remove Guest role records.
+    """
+    with engine.begin() as connection:
+        guest_role_id = connection.execute(
+            text("SELECT id FROM roles WHERE name = 'Guest' LIMIT 1")
+        ).scalar()
+        if guest_role_id is None:
+            return
+
+        viewer_role_id = connection.execute(
+            text("SELECT id FROM roles WHERE name = 'Viewer' LIMIT 1")
+        ).scalar()
+        if viewer_role_id is None:
+            # Safety fallback: if Viewer row is unexpectedly missing, keep data untouched.
+            return
+
+        connection.execute(
+            text("UPDATE users SET role_id = :viewer_id WHERE role_id = :guest_id"),
+            {"viewer_id": int(viewer_role_id), "guest_id": int(guest_role_id)},
+        )
+        connection.execute(
+            text("DELETE FROM permissions WHERE role_id = :guest_id"),
+            {"guest_id": int(guest_role_id)},
+        )
+        connection.execute(
+            text("DELETE FROM roles WHERE id = :guest_id"),
+            {"guest_id": int(guest_role_id)},
+        )
+
+
+# Detailed function explanation:
+# - Purpose: `get_or_create_default_ingestion_user` handles one focused step of this module's workflow.
+# - Usage in flow: Called by routes/services/helpers to keep the logic modular and reusable.
+# - Input/Output intent: Validates/normalizes inputs, performs its task, and returns predictable output
+#   (or raises a clear exception) so downstream code can continue reliably.
 def get_or_create_default_ingestion_user(db: Session) -> User:
     # Fallback uploader identity for ingestion flows that run without
     # a logged-in user context (legacy/dev utility paths).
@@ -398,5 +572,3 @@ def get_or_create_default_ingestion_user(db: Session) -> User:
     db.add(user)
     db.flush()
     return user
-
-

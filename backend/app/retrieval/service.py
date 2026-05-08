@@ -21,6 +21,18 @@ from app.retrieval.chroma_store import (
     upsert_chunk_vectors,
     vector_store_health,
 )
+
+
+def _get_langchain_chroma_class():
+    try:
+        from langchain_chroma import Chroma  # type: ignore
+        return Chroma
+    except Exception:
+        try:
+            from langchain_community.vectorstores import Chroma  # type: ignore
+            return Chroma
+        except Exception:
+            return None
 # Chunks to vector record.
 def _chunk_to_vector_record(chunk: DocumentChunk, vector: list[float]) -> dict[str, Any]:
     return {
@@ -116,9 +128,8 @@ def _search_vectors_with_langchain(
     document_ids: list[int] | None = None,
     owner_user_id: int | None = None,
 ) -> list[dict[str, Any]] | None:
-    try:
-        from langchain_community.vectorstores import Chroma
-    except Exception:
+    Chroma = _get_langchain_chroma_class()
+    if Chroma is None:
         return None
 
     where_filter = _build_chroma_where_filter(
@@ -210,6 +221,12 @@ def _chunk_to_payload(chunk: DocumentChunk, *, score: float, retrieval_method: s
     }
 
 
+def _semantic_rerank_from_distance(distance: float) -> float:
+    # Convert distance (lower is better) into a bounded relevance score (higher is better).
+    safe_distance = max(0.0, float(distance))
+    return 1.0 / (1.0 + safe_distance)
+
+
 def _build_bm25_retriever_from_chunks(chunks: list[DocumentChunk], *, k: int):
     try:
         from langchain_community.retrievers import BM25Retriever
@@ -296,6 +313,8 @@ def search_chunk_text(
                 "source_name": result["source_name"],
                 "permissions_tags": permissions_tags,
                 "content": result["content"],
+                "retrieval_method": "semantic",
+                "rerank_score": _semantic_rerank_from_distance(float(result["score"])),
             }
         )
 
@@ -394,8 +413,10 @@ def hybrid_search_chunk_text(
         document_ids=document_ids,
         owner_user_id=owner_user_id,
     )
+    Chroma = _get_langchain_chroma_class()
     try:
-        from langchain_community.vectorstores import Chroma
+        if Chroma is None:
+            raise RuntimeError("LangChain Chroma integration is unavailable.")
         vector_store = Chroma(
             client=get_chroma_client(),
             collection_name=vector_store_health().get("collection", ""),

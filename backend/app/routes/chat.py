@@ -10,13 +10,13 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.auth.permissions import accessible_document_ids
+from app.auth.permissions import build_retrieval_scope_with_fallback
 from app.auth.security import get_current_user
-from app.models.mysql import ChatMessage, ChatSession, Document, MessageRole, MetricUsage, User, get_db
+from app.models.mysql import ChatMessage, ChatSession, MessageRole, MetricUsage, User, get_db
 from app.retrieval.service import ensure_vector_store_ready
 from app.services.chat_history import (
     append_chat_message,
@@ -28,7 +28,7 @@ from app.services.chat_history import (
     serialize_session,
 )
 from app.services.rag_chat import answer_question_from_matches, answer_question_with_retrieval
-from app.telemetry.service import estimate_cost, estimate_token_count
+from app.telemetry.service import estimate_cost
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -54,6 +54,10 @@ class AnswerFromMatchesRequest(BaseModel):
 class ChatQueryRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User question to answer from indexed documents.")
     limit: int = Field(default=5, ge=1, le=20, description="Maximum number of chunks to retrieve before generation.")
+    document_ids: list[int] | None = Field(
+        default=None,
+        description="Optional explicit document ids to constrain retrieval.",
+    )
     session_id: int | None = Field(
         default=None,
         ge=1,
@@ -112,10 +116,27 @@ def chat_query(
         #check if vector db is ready
         ensure_vector_store_ready()
         # check what documents is allowed and take only those
-        allowed_document_ids = accessible_document_ids(db, current_user, permission_field="can_query")
-        if allowed_document_ids is None:
-            # Even for admin-like global access, constrain retrieval to existing DB documents only.
-            allowed_document_ids = list(db.scalars(select(Document.id)).all())
+        retrieval_scope = build_retrieval_scope_with_fallback(
+            db,
+            current_user,
+            permission_field="can_query",
+            fallback_permission_field="can_read",
+        )
+        scoped_document_ids = retrieval_scope.document_ids
+        if payload.document_ids is not None:
+            requested_ids = [int(document_id) for document_id in payload.document_ids]
+            allowed_set = set(scoped_document_ids)
+            disallowed_ids = [document_id for document_id in requested_ids if document_id not in allowed_set]
+            if disallowed_ids:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"You do not have query access to document ids: {sorted(set(disallowed_ids))}.",
+                )
+            scoped_document_ids = requested_ids
+
+        if not scoped_document_ids:
+            raise HTTPException(status_code=400, detail="No accessible documents selected for retrieval.")
+
         # this loads the session or creates a new one
         session, created = get_or_create_chat_session(
             db,
@@ -142,22 +163,18 @@ def chat_query(
             question_for_usage,
             limit=payload.limit,
             memory_context=memory_context,
-            document_ids=allowed_document_ids,
+            document_ids=scoped_document_ids,
+            owner_user_id=retrieval_scope.owner_user_id,
         )
         token_usage = result.get("token_usage") or {}
         model_token_input = int(token_usage.get("input_tokens", 0) or 0)
         model_token_output = int(token_usage.get("output_tokens", 0) or 0)
         model_token_total = int(token_usage.get("total_tokens", model_token_input + model_token_output) or 0)
 
-        if model_token_total <= 0:
-            model_token_input = estimate_token_count(question_for_usage)
-            model_token_output = estimate_token_count(result.get("answer", ""))
-            model_token_total = model_token_input + model_token_output
+        user_message_tokens = model_token_input
+        assistant_message_tokens = model_token_output
 
-        visible_question_tokens = estimate_token_count(question_for_usage)
-        visible_answer_tokens = estimate_token_count(result.get("answer", ""))
-
-        user_message.token_count = visible_question_tokens
+        user_message.token_count = user_message_tokens
         db.flush()
         append_chat_message(
             db,
@@ -165,7 +182,7 @@ def chat_query(
             user_id=current_user.id,
             role=MessageRole.ASSISTANT,
             content=result["answer"],
-            token_count=visible_answer_tokens,
+            token_count=assistant_message_tokens,
         )
         db.commit()
     except LookupError as exc:
@@ -179,6 +196,14 @@ def chat_query(
         raise
     except Exception as exc:
         db.rollback()
+        if exc.__class__.__name__ == "APIConnectionError":
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "LLM provider connection failed. The server could not reach the model API. "
+                    "Check internet/firewall/proxy settings and verify outbound HTTPS access."
+                ),
+            ) from exc
         raise HTTPException(status_code=502, detail=f"RAG query failed: {exc}") from exc
 
     estimated_cost = estimate_cost(model_token_input, model_token_output)
@@ -261,7 +286,13 @@ def delete_session(
         # Explicitly delete dependent rows to support existing DBs
         # where FK constraints may not be ON DELETE CASCADE.
         db.execute(delete(ChatMessage).where(ChatMessage.session_id == session_id))
-        db.execute(delete(MetricUsage).where(MetricUsage.session_id == session_id))
+        # Preserve historical token usage while allowing session deletion
+        # by detaching metrics from the deleted session.
+        db.execute(
+            update(MetricUsage)
+            .where(MetricUsage.session_id == session_id)
+            .values(session_id=None)
+        )
         db.delete(session)
         db.commit()
     except SQLAlchemyError as exc:
