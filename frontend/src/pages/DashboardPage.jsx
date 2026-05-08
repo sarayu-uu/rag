@@ -92,7 +92,7 @@ function buildMetricCards({ documents, health, metricTotals, metrics, userRole }
       value: countForType(metrics, "chat"),
       detail: `Total requests: ${metricTotals.request_count ?? 0}`,
       tone: "chat",
-      hint: "Chat requests logged for your own account. Viewer and Guest roles only see their personal metrics.",
+      hint: "Chat requests logged for your own account. Viewer role users only see their personal metrics.",
     },
     {
       label: "Avg latency",

@@ -8,10 +8,12 @@ import SectionHeader from "../components/common/SectionHeader";
 import ChatTranscript from "../components/chat/ChatTranscript";
 import SessionList from "../components/chat/SessionList";
 import SourcePanel from "../components/chat/SourcePanel";
-import { deleteChatSession, getChatMessages, getChatSessions, queryChat } from "../lib/api";
+import { deleteChatSession, getChatMessages, getChatSessions, getDocuments, queryChat } from "../lib/api";
 /** Renders the main chat workspace. */
 export default function ChatPage() {
   const [sessions, setSessions] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [question, setQuestion] = useState("");
@@ -43,8 +45,18 @@ export default function ChatPage() {
     }
   }
 
+  async function loadDocuments() {
+    try {
+      const response = await getDocuments();
+      setDocuments(response.documents || []);
+    } catch (documentsError) {
+      setError(documentsError.message || "Failed to load documents.");
+    }
+  }
+
   useEffect(() => {
     loadSessions();
+    loadDocuments();
   }, []);
   /** Opens session. */
   async function openSession(sessionId, options = {}) {
@@ -70,6 +82,12 @@ export default function ChatPage() {
     setAnswerPayload(null);
     setQuestion("");
     setError("");
+  }
+
+  function toggleDocumentSelection(documentId) {
+    setSelectedDocumentIds((current) =>
+      current.includes(documentId) ? current.filter((id) => id !== documentId) : [...current, documentId]
+    );
   }
   /** Deletes the selected chat session. */
   async function handleDeleteSession(session) {
@@ -111,6 +129,7 @@ export default function ChatPage() {
         question: question.trim(),
         limit: 5,
         sessionId: activeSessionId,
+        documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : null,
       });
       setAnswerPayload(response);
       setPipelineTrace(response.pipeline_trace || []);
@@ -169,6 +188,50 @@ export default function ChatPage() {
                   disabled={isActiveSessionAtLimit}
                 />
               </label>
+              <div className="document-filter-box">
+                <div className="document-filter-head">
+                  <span className="eyebrow">Document scope</span>
+                  <small>
+                    {selectedDocumentIds.length > 0
+                      ? `${selectedDocumentIds.length} selected`
+                      : "All accessible documents"}
+                  </small>
+                </div>
+                <div className="document-filter-actions">
+                  <button
+                    type="button"
+                    className="ghost-button document-filter-action"
+                    onClick={() => setSelectedDocumentIds(documents.map((document) => document.id))}
+                    disabled={documents.length === 0}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button document-filter-action"
+                    onClick={() => setSelectedDocumentIds([])}
+                    disabled={selectedDocumentIds.length === 0}
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="document-filter-list">
+                  {documents.length === 0 ? (
+                    <small>No documents available for selection.</small>
+                  ) : (
+                    documents.map((document) => (
+                      <label key={document.id} className="document-filter-item">
+                        <input
+                          type="checkbox"
+                          checked={selectedDocumentIds.includes(document.id)}
+                          onChange={() => toggleDocumentSelection(document.id)}
+                        />
+                        <span title={document.title}>{document.title}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
               <div className="composer-actions">
                 <small>
                   {activeSessionId

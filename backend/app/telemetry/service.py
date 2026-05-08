@@ -10,10 +10,10 @@ from decimal import Decimal
 from time import perf_counter
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models.mysql import MetricUsage, RequestType, User, check_db_connection
+from app.models.mysql import MetricUsage, RequestType, Role, RoleName, User, check_db_connection
 from app.retrieval.chroma_store import vector_store_health
 
 DEFAULT_INPUT_TOKEN_COST = Decimal("0.0000005")
@@ -158,14 +158,30 @@ def write_metric_usage(db: Session, payload: TelemetryWritePayload) -> None:
 
 
 # Applies role-based visibility rules to telemetry queries:
-# admins/managers can see global data; other users only see their own rows.
+# - Admin: global data
+# - Manager: team data (manager + assigned analysts)
+# - Others: own data only
 def _apply_scope(statement, *, current_user: User):
     role_name = current_user.role.name if current_user.role else None
     if role_name is None:
         return statement.where(MetricUsage.user_id == current_user.id), "current_user"
 
-    if role_name.value in {"Admin", "Manager"}:
+    if role_name == RoleName.ADMIN:
         return statement, "global"
+    if role_name == RoleName.MANAGER:
+        team_user_ids_stmt = (
+            select(User.id)
+            .where(
+                or_(
+                    User.id == current_user.id,
+                    and_(
+                        User.manager_user_id == current_user.id,
+                        User.role.has(Role.name == RoleName.ANALYST),
+                    ),
+                )
+            )
+        )
+        return statement.where(MetricUsage.user_id.in_(team_user_ids_stmt)), "team"
     return statement.where(MetricUsage.user_id == current_user.id), "current_user"
 
 
@@ -220,8 +236,7 @@ def build_telemetry_summary(db: Session, *, current_user: User, hours: int = 24)
         .order_by(func.sum(MetricUsage.request_count).desc())
         .limit(25)
     )
-    if scope != "global":
-        per_user_stmt = per_user_stmt.where(MetricUsage.user_id == current_user.id)
+    per_user_stmt, _ = _apply_scope(per_user_stmt, current_user=current_user)
     per_user_rows = db.execute(per_user_stmt).all()
 
     db_status = "connected"

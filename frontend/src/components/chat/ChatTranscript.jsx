@@ -12,6 +12,49 @@ function formatRole(role) {
   }
   return String(role).toLowerCase();
 }
+
+function renderMessageContent(content) {
+  const text = String(content || "");
+  const parts = text.split(/```/g);
+
+  return parts.map((part, index) => {
+    if (index % 2 === 1) {
+      const lines = part.split("\n");
+      const language = (lines[0] || "").trim();
+      const code = lines.slice(1).join("\n").trimEnd();
+      return (
+        <pre key={`code-${index}`} className="message-code-block">
+          <code className={language ? `language-${language}` : ""}>{code || part}</code>
+        </pre>
+      );
+    }
+
+    const bulletLines = part
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => /^[-*]\s+/.test(line));
+
+    if (bulletLines.length >= 2 && bulletLines.length >= Math.ceil(part.split("\n").filter((line) => line.trim()).length / 2)) {
+      return (
+        <ul key={`list-${index}`} className="message-bullet-list">
+          {bulletLines.map((line, itemIndex) => (
+            <li key={`item-${index}-${itemIndex}`}>{line.replace(/^[-*]\s+/, "")}</li>
+          ))}
+        </ul>
+      );
+    }
+
+    const paragraphs = part
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    return paragraphs.map((paragraph, paragraphIndex) => (
+      <p key={`p-${index}-${paragraphIndex}`}>{paragraph}</p>
+    ));
+  });
+}
 /** Renders chat messages in transcript form. */
 export default function ChatTranscript({ messages, pendingAnswer, loading, children }) {
   const scrollRef = useRef(null);
@@ -52,7 +95,7 @@ export default function ChatTranscript({ messages, pendingAnswer, loading, child
                   <span>{formatRole(message.role)}</span>
                   <small>{message.created_at ? new Date(message.created_at).toLocaleTimeString() : ""}</small>
                 </header>
-                <p>{message.content}</p>
+                <div className="message-content">{renderMessageContent(message.content)}</div>
               </article>
             ))}
 

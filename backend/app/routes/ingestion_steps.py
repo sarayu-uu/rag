@@ -122,6 +122,9 @@ def _find_duplicate_document_id(
     upload_user_id: int,
     file_hash: str,
 ) -> int | None:
+    if not hasattr(Document, "file_hash"):
+        return None
+
     duplicate_id = db.scalar(
         select(Document.id).where(
             Document.upload_user_id == int(upload_user_id),

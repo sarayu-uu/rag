@@ -132,4 +132,3 @@ def load_url_with_metadata(url: str) -> dict[str, Any]:
         },
     }
 
-

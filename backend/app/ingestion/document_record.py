@@ -69,15 +69,18 @@ def save_document_record(db: Session, payload: dict[str, Any]) -> Document:
     else:
         status = DocumentStatus(str(status_value))
 
-    document = Document(
-        title=payload["title"],
-        file_type=payload["file_type"],
-        storage_path=payload["storage_path"],
-        source_url=payload.get("source_url"),
-        file_hash=payload.get("file_hash"),
-        upload_user_id=payload["upload_user_id"],
-        status=status,
-    )
+    document_kwargs: dict[str, Any] = {
+        "title": payload["title"],
+        "file_type": payload["file_type"],
+        "storage_path": payload["storage_path"],
+        "source_url": payload.get("source_url"),
+        "upload_user_id": payload["upload_user_id"],
+        "status": status,
+    }
+    if hasattr(Document, "file_hash"):
+        document_kwargs["file_hash"] = payload.get("file_hash")
+
+    document = Document(**document_kwargs)
 
     db.add(document)
     db.flush()

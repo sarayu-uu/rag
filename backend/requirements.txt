@@ -16,6 +16,7 @@ beautifulsoup4
 python-dotenv
 Jinja2
 langchain
+langsmith
 langchain-groq
 chromadb
 fastembed
@@ -25,3 +26,4 @@ bcrypt
 python-jose[cryptography]
 ragas
 datasets
+rank_bm25

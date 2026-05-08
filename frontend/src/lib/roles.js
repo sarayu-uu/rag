@@ -8,7 +8,6 @@ export const ROLE_KEYS = {
   MANAGER: "Manager",
   ANALYST: "Analyst",
   VIEWER: "Viewer",
-  GUEST: "Guest",
 };
 
 export const ROLE_DEFINITIONS = {
@@ -36,16 +35,10 @@ export const ROLE_DEFINITIONS = {
     description: "Reviews approved documents, conversations, and cited answers.",
     navigation: ["dashboard", "documents", "chat", "profile"],
   },
-  [ROLE_KEYS.GUEST]: {
-    label: "Guest",
-    tone: "Limited",
-    description: "Has a minimal experience with restricted access to approved content only.",
-    navigation: ["dashboard", "chat", "profile"],
-  },
 };
 /** Gets role definition. */
 export function getRoleDefinition(role) {
-  return ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS[ROLE_KEYS.GUEST];
+  return ROLE_DEFINITIONS[role] || ROLE_DEFINITIONS[ROLE_KEYS.VIEWER];
 }
 /** Checks whether management role. */
 export function isManagementRole(role) {

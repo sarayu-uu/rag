@@ -3,7 +3,7 @@
  * It connects user interactions to API calls and renders role-aware experiences in the RAG workspace.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 /** Renders the password visibility icon. */
@@ -28,6 +28,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { signIn } = useAuth();
+  const passwordInputRef = useRef(null);
   const navigate = useNavigate();
   const location = useLocation();
   /** Submits the current form action. */
@@ -65,12 +66,18 @@ export default function LoginPage() {
 
           <form className="auth-form" onSubmit={handleSubmit}>
             <label>
-              <span>Email</span>
+              <span>Username or Email</span>
               <input
-                type="email"
+                type="text"
                 value={form.email}
                 onChange={(event) => setForm((value) => ({ ...value, email: event.target.value }))}
-                placeholder="you@gmail.com"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    passwordInputRef.current?.focus();
+                  }
+                }}
+                placeholder="your username or you@gmail.com"
                 required
               />
             </label>
@@ -79,6 +86,7 @@ export default function LoginPage() {
               <span>Password</span>
               <div className="password-field">
                 <input
+                  ref={passwordInputRef}
                   type={showPassword ? "text" : "password"}
                   value={form.password}
                   onChange={(event) => setForm((value) => ({ ...value, password: event.target.value }))}

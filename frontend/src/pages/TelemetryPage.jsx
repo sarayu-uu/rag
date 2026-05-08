@@ -35,6 +35,7 @@ export default function TelemetryPage() {
   const [evalResult, setEvalResult] = useState(null);
   const canRunEval =
     user?.role === "Admin" || user?.role === "SuperAdmin" || user?.role === "Super Admin";
+  const isAdmin = user?.role === "Admin";
   /** Loads telemetry. */
   async function loadTelemetry(windowHours = hours) {
     setLoading(true);
@@ -87,7 +88,12 @@ export default function TelemetryPage() {
   const byRequestType = usage.by_request_type || [];
   const chatUsageRow = byRequestType.find((row) => String(row.request_type).toLowerCase() === "chat") || null;
   const windowHoursLabel = telemetry?.window_hours ?? hours;
-  const scopeLabel = telemetry?.scope === "global" ? "all visible users" : "your account";
+  const scopeLabel =
+    telemetry?.scope === "global"
+      ? "all users"
+      : telemetry?.scope === "team"
+        ? "your team"
+        : "your account";
 
   return (
     <div className="page-stack">
@@ -220,53 +226,55 @@ export default function TelemetryPage() {
         </article>
       </section>
 
-      <section className="content-grid two-up">
-        <article className="feature-card">
-          <div className="feature-card-header">
-            <div>
-              <p className="eyebrow">Request classes</p>
-              <h2>By request type</h2>
-            </div>
-          </div>
-          <div className="data-list">
-            {(usage.by_request_type || []).map((row) => (
-              <div key={row.request_type} className="data-row">
-                <MetricHelp
-                  label={row.request_type}
-                  hint="Request class from telemetry logs. Counts, errors, tokens, and average latency are aggregated for this class in the selected window."
-                />
-                <span>
-                  req: {row.request_count} | err: {row.error_count} | tok: {row.token_total} | avg: {row.avg_latency_ms} ms
-                </span>
+      {isAdmin ? (
+        <section className="content-grid two-up">
+          <article className="feature-card">
+            <div className="feature-card-header">
+              <div>
+                <p className="eyebrow">Request classes</p>
+                <h2>By request type</h2>
               </div>
-            ))}
-            {(usage.by_request_type || []).length === 0 ? <p className="muted-copy">No data.</p> : null}
-          </div>
-        </article>
+            </div>
+            <div className="data-list">
+              {(usage.by_request_type || []).map((row) => (
+                <div key={row.request_type} className="data-row">
+                  <MetricHelp
+                    label={row.request_type}
+                    hint="Request class from telemetry logs. Counts, errors, tokens, and average latency are aggregated for this class in the selected window."
+                  />
+                  <span>
+                    req: {row.request_count} | err: {row.error_count} | tok: {row.token_total} | avg: {row.avg_latency_ms} ms
+                  </span>
+                </div>
+              ))}
+              {(usage.by_request_type || []).length === 0 ? <p className="muted-copy">No data.</p> : null}
+            </div>
+          </article>
 
-        <article className="feature-card">
-          <div className="feature-card-header">
-            <div>
-              <p className="eyebrow">User usage</p>
-              <h2>Top users in window</h2>
-            </div>
-          </div>
-          <div className="data-list">
-            {(usage.per_user_usage || []).map((row) => (
-              <div key={`u-${row.user_id ?? "none"}`} className="data-row">
-                <MetricHelp
-                  label={`User ${row.user_id ?? "N/A"}`}
-                  hint="Per-user usage row for the selected telemetry window. Admin and Manager roles can see users in the global scope."
-                />
-                <span>
-                  req: {row.request_count} | tok: {row.token_total} | ${Number(row.estimated_cost ?? 0).toFixed(6)}
-                </span>
+          <article className="feature-card">
+            <div className="feature-card-header">
+              <div>
+                <p className="eyebrow">User usage</p>
+                <h2>Top users in window</h2>
               </div>
-            ))}
-            {(usage.per_user_usage || []).length === 0 ? <p className="muted-copy">No data.</p> : null}
-          </div>
-        </article>
-      </section>
+            </div>
+            <div className="data-list">
+              {(usage.per_user_usage || []).map((row) => (
+                <div key={`u-${row.user_id ?? "none"}`} className="data-row">
+                  <MetricHelp
+                    label={`User ${row.user_id ?? "N/A"}`}
+                    hint="Per-user usage row for the selected telemetry window. Admin sees all users; Manager sees only their team."
+                  />
+                  <span>
+                    req: {row.request_count} | tok: {row.token_total} | ${Number(row.estimated_cost ?? 0).toFixed(6)}
+                  </span>
+                </div>
+              ))}
+              {(usage.per_user_usage || []).length === 0 ? <p className="muted-copy">No data.</p> : null}
+            </div>
+          </article>
+        </section>
+      ) : null}
 
       {canRunEval ? (
         <section className="feature-card">

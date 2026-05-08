@@ -11,7 +11,6 @@ const ROLE_OPTIONS = [
   ROLE_KEYS.MANAGER,
   ROLE_KEYS.ANALYST,
   ROLE_KEYS.VIEWER,
-  ROLE_KEYS.GUEST,
 ];
 /** Renders the password visibility icon. */
 function EyeIcon({ open }) {
