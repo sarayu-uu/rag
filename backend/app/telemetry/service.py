@@ -53,7 +53,7 @@ def classify_request_type(path: str) -> RequestType | None:
         return RequestType.CHAT
     if path.startswith("/retrieval"):
         return RequestType.RETRIEVAL
-    if path.startswith("/ingestion") or path.startswith("/documents"):
+    if path.startswith("/ingestion") or path.startswith("/documents") or path.startswith("/admin"):
         return RequestType.INGESTION
     return None
 
@@ -132,7 +132,7 @@ def build_write_payload(
         ingestion_time_ms=ingestion_time_ms,
         retrieval_latency_ms=retrieval_latency_ms,
         model_latency_ms=model_latency_ms,
-        error_count=1 if status_code >= 400 else 0,
+        error_count=1 if status_code >= 500 else 0,
     )
 
 
@@ -177,6 +177,8 @@ def _apply_scope(statement, *, current_user: User):
                     and_(
                         User.manager_user_id == current_user.id,
                         User.role.has(Role.name == RoleName.ANALYST),
+                        User.is_active.is_(True),
+                        User.is_deleted.is_(False),
                     ),
                 )
             )
@@ -225,14 +227,16 @@ def build_telemetry_summary(db: Session, *, current_user: User, hours: int = 24)
     per_user_stmt = (
         select(
             MetricUsage.user_id,
+            User.username,
             func.coalesce(func.sum(MetricUsage.request_count), 0),
             func.coalesce(func.sum(MetricUsage.error_count), 0),
             func.coalesce(func.sum(MetricUsage.token_total), 0),
             func.coalesce(func.sum(MetricUsage.estimated_cost), 0),
             func.coalesce(func.avg(MetricUsage.latency_ms), 0),
         )
+        .outerjoin(User, User.id == MetricUsage.user_id)
         .where(MetricUsage.created_at >= from_ts)
-        .group_by(MetricUsage.user_id)
+        .group_by(MetricUsage.user_id, User.username)
         .order_by(func.sum(MetricUsage.request_count).desc())
         .limit(25)
     )
@@ -281,11 +285,12 @@ def build_telemetry_summary(db: Session, *, current_user: User, hours: int = 24)
             "per_user_usage": [
                 {
                     "user_id": row[0],
-                    "request_count": int(row[1] or 0),
-                    "error_count": int(row[2] or 0),
-                    "token_total": int(row[3] or 0),
-                    "estimated_cost": round(float(row[4] or 0), 6),
-                    "avg_latency_ms": round(float(row[5] or 0), 2),
+                    "username": row[1],
+                    "request_count": int(row[2] or 0),
+                    "error_count": int(row[3] or 0),
+                    "token_total": int(row[4] or 0),
+                    "estimated_cost": round(float(row[5] or 0), 6),
+                    "avg_latency_ms": round(float(row[6] or 0), 2),
                 }
                 for row in per_user_rows
             ],

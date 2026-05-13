@@ -11,11 +11,11 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth.security import get_current_user, is_privileged_user
-from app.models.mysql import MetricUsage, RequestType, User, get_db
+from app.models.mysql import MetricUsage, RequestType, Role, RoleName, User, get_db
 from app.telemetry.service import build_telemetry_summary
 
 router = APIRouter(tags=["metrics"])
@@ -56,7 +56,29 @@ def get_metrics(
         .group_by(MetricUsage.request_type)
         .order_by(MetricUsage.request_type.asc())
     )
-    if not is_privileged_user(current_user):
+    scope = "current_user"
+    role_name = current_user.role.name if current_user.role else None
+    if role_name == RoleName.ADMIN:
+        scope = "global"
+    elif role_name == RoleName.MANAGER:
+        scope = "team"
+        team_user_ids_stmt = (
+            select(User.id)
+            .where(
+                or_(
+                    User.id == current_user.id,
+                    and_(
+                        User.manager_user_id == current_user.id,
+                        User.role.has(Role.name == RoleName.ANALYST),
+                        User.is_active.is_(True),
+                        User.is_deleted.is_(False),
+                    ),
+                )
+            )
+        )
+        totals_statement = totals_statement.where(MetricUsage.user_id.in_(team_user_ids_stmt))
+        by_request_type_statement = by_request_type_statement.where(MetricUsage.user_id.in_(team_user_ids_stmt))
+    else:
         totals_statement = totals_statement.where(MetricUsage.user_id == current_user.id)
         by_request_type_statement = by_request_type_statement.where(MetricUsage.user_id == current_user.id)
 
@@ -85,7 +107,7 @@ def get_metrics(
             "estimated_cost": round(_to_float(totals[7]), 6),
         },
         "by_request_type": by_request_type,
-        "scope": "global" if is_privileged_user(current_user) else "current_user",
+        "scope": scope,
     }
 
 
