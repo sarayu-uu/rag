@@ -262,7 +262,7 @@ export default function TelemetryPage() {
               {(usage.per_user_usage || []).map((row) => (
                 <div key={`u-${row.user_id ?? "none"}`} className="data-row">
                   <MetricHelp
-                    label={`User ${row.user_id ?? "N/A"}`}
+                    label={`${row.username || "Unknown"} (ID: ${row.user_id ?? "N/A"})`}
                     hint="Per-user usage row for the selected telemetry window. Admin sees all users; Manager sees only their team."
                   />
                   <span>

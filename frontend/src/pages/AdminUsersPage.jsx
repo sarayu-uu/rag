@@ -119,7 +119,132 @@ export default function AdminUsersPage() {
   const canDeleteUsers = currentUser?.role === ROLE_KEYS.ADMIN;
   const isAdmin = currentUser?.role === ROLE_KEYS.ADMIN;
   const isUsageAdmin = currentUser?.role === ROLE_KEYS.ADMIN;
-  const managerUsers = users.filter((item) => item.role === ROLE_KEYS.MANAGER);
+  const activeUsers = users.filter((item) => !item.is_deleted);
+  const deletedUsers = users.filter((item) => Boolean(item.is_deleted));
+  const managerUsers = activeUsers.filter((item) => item.role === ROLE_KEYS.MANAGER);
+
+  function renderUserRow(user, { deletedSection = false } = {}) {
+    const controlsDisabled = deletedSection || busyUserId === user.id;
+    return (
+      <div key={user.id} className="table-row admin-users-row">
+        <div className="admin-user-cell">
+          <strong>{user.username} (ID: {user.id})</strong>
+        </div>
+        <span>{user.email}</span>
+        <span>
+          <span className="role-chip admin-role-chip">{user.role}</span>
+        </span>
+        <span>
+          {isUsageAdmin ? (
+            <button
+              type="button"
+              className="ghost-button admin-save-button"
+              onClick={() => handleToggleUsage(user.id)}
+              disabled={usageBusyUserId === user.id}
+            >
+              {usageBusyUserId === user.id ? "Loading..." : usageOpenUserId === user.id ? "Hide Usage" : "Usage"}
+            </button>
+          ) : (
+            <span className="admin-user-meta">Unavailable</span>
+          )}
+        </span>
+        <div className="admin-user-actions">
+          <select
+            value={roleDrafts[user.id] || user.role}
+            className="admin-role-select"
+            onChange={(event) => setRoleDrafts((value) => ({ ...value, [user.id]: event.target.value }))}
+            disabled={controlsDisabled}
+          >
+            {ROLE_OPTIONS.map((role) => (
+              <option key={role} value={role}>
+                {role}
+              </option>
+            ))}
+          </select>
+          {isAdmin && (roleDrafts[user.id] || user.role) === ROLE_KEYS.ANALYST ? (
+            <select
+              value={managerDrafts[user.id] ?? ""}
+              className="admin-role-select admin-manager-select"
+              onChange={(event) => setManagerDrafts((value) => ({ ...value, [user.id]: event.target.value }))}
+              disabled={controlsDisabled}
+            >
+              <option value="">Select manager</option>
+              {managerUsers.map((manager) => (
+                <option key={manager.id} value={manager.id}>
+                  {manager.username} ({manager.email})
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <button
+            type="button"
+            className="ghost-button admin-save-button"
+            onClick={() => handleRoleChange(user.id)}
+            disabled={
+              controlsDisabled ||
+              (isAdmin && (roleDrafts[user.id] || user.role) === ROLE_KEYS.ANALYST && !managerDrafts[user.id])
+            }
+          >
+            {busyUserId === user.id ? "Saving..." : "Save"}
+          </button>
+          {deletedSection ? (
+            <span className="admin-user-meta">Deleted user: role changes disabled</span>
+          ) : canDeleteUsers && user.role !== ROLE_KEYS.ADMIN ? (
+            <button
+              type="button"
+              className="ghost-button danger-button admin-delete-button"
+              onClick={() => handleDeleteUser(user)}
+              disabled={busyUserId === user.id}
+            >
+              {busyUserId === user.id ? "Deleting..." : "Delete"}
+            </button>
+          ) : (
+            <span className="admin-user-meta">{user.role === ROLE_KEYS.ADMIN ? "Protected" : "Unavailable"}</span>
+          )}
+        </div>
+        {isUsageAdmin && usageOpenUserId === user.id && usagePanel[user.id] ? (
+          <div className="admin-usage-panel">
+            <div className="admin-usage-block">
+              <strong>1) Total tokens spent by the user</strong>
+              <p>
+                {usagePanel[user.id].total_tokens_spent ?? 0} tokens
+                {" | "}
+                ${Number(usagePanel[user.id].total_estimated_cost_usd ?? 0).toFixed(6)}
+              </p>
+            </div>
+            <div className="admin-usage-block">
+              <strong>2) See his/her documents</strong>
+              {usagePanel[user.id].documents?.length ? (
+                <ul>
+                  {usagePanel[user.id].documents.map((doc) => (
+                    <li key={doc.id}>
+                      {doc.title} ({doc.file_type})
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No documents found.</p>
+              )}
+            </div>
+            <div className="admin-usage-block">
+              <strong>3) See his/her chats</strong>
+              {usagePanel[user.id].chats?.length ? (
+                <ul>
+                  {usagePanel[user.id].chats.map((chat) => (
+                    <li key={chat.session_id}>
+                      {chat.title || `Session ${chat.session_id}`} - {chat.messages?.length || 0} messages
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>No chats found.</p>
+              )}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="page-stack">
@@ -133,6 +258,7 @@ export default function AdminUsersPage() {
       {success ? <div className="success-banner">{success}</div> : null}
 
       <section className="feature-card table-card">
+        <h3>Users</h3>
         <div className="table-shell">
           <div className="table-row table-head admin-users-row">
             <span>User</span>
@@ -141,123 +267,21 @@ export default function AdminUsersPage() {
             <span>Usage</span>
             <span>Controls</span>
           </div>
-          {users.map((user) => (
-            <div key={user.id} className="table-row admin-users-row">
-              <div className="admin-user-cell">
-                <strong>{user.username}</strong>
-              </div>
-              <span>{user.email}</span>
-              <span>
-                <span className="role-chip admin-role-chip">{user.role}</span>
-              </span>
-              <span>
-                {isUsageAdmin ? (
-                  <button
-                    type="button"
-                    className="ghost-button admin-save-button"
-                    onClick={() => handleToggleUsage(user.id)}
-                    disabled={usageBusyUserId === user.id}
-                  >
-                    {usageBusyUserId === user.id ? "Loading..." : usageOpenUserId === user.id ? "Hide Usage" : "Usage"}
-                  </button>
-                ) : (
-                  <span className="admin-user-meta">Unavailable</span>
-                )}
-              </span>
-              <div className="admin-user-actions">
-                <select
-                  value={roleDrafts[user.id] || user.role}
-                  className="admin-role-select"
-                  onChange={(event) => setRoleDrafts((value) => ({ ...value, [user.id]: event.target.value }))}
-                  disabled={busyUserId === user.id}
-                >
-                  {ROLE_OPTIONS.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-                {isAdmin && (roleDrafts[user.id] || user.role) === ROLE_KEYS.ANALYST ? (
-                  <select
-                    value={managerDrafts[user.id] ?? ""}
-                    className="admin-role-select admin-manager-select"
-                    onChange={(event) => setManagerDrafts((value) => ({ ...value, [user.id]: event.target.value }))}
-                    disabled={busyUserId === user.id}
-                  >
-                    <option value="">Select manager</option>
-                    {managerUsers.map((manager) => (
-                      <option key={manager.id} value={manager.id}>
-                        {manager.username} ({manager.email})
-                      </option>
-                    ))}
-                  </select>
-                ) : null}
-                <button
-                  type="button"
-                  className="ghost-button admin-save-button"
-                  onClick={() => handleRoleChange(user.id)}
-                  disabled={
-                    busyUserId === user.id ||
-                    (isAdmin && (roleDrafts[user.id] || user.role) === ROLE_KEYS.ANALYST && !managerDrafts[user.id])
-                  }
-                >
-                  {busyUserId === user.id ? "Saving..." : "Save"}
-                </button>
-                {canDeleteUsers && user.role !== ROLE_KEYS.ADMIN ? (
-                  <button
-                    type="button"
-                    className="ghost-button danger-button admin-delete-button"
-                    onClick={() => handleDeleteUser(user)}
-                    disabled={busyUserId === user.id}
-                  >
-                    {busyUserId === user.id ? "Deleting..." : "Delete"}
-                  </button>
-                ) : (
-                  <span className="admin-user-meta">{user.role === ROLE_KEYS.ADMIN ? "Protected" : "Unavailable"}</span>
-                )}
-              </div>
-              {isUsageAdmin && usageOpenUserId === user.id && usagePanel[user.id] ? (
-                <div className="admin-usage-panel">
-                  <div className="admin-usage-block">
-                    <strong>1) Total tokens spent by the user</strong>
-                    <p>
-                      {usagePanel[user.id].total_tokens_spent ?? 0} tokens
-                      {" | "}
-                      ${Number(usagePanel[user.id].total_estimated_cost_usd ?? 0).toFixed(6)}
-                    </p>
-                  </div>
-                  <div className="admin-usage-block">
-                    <strong>2) See his/her documents</strong>
-                    {usagePanel[user.id].documents?.length ? (
-                      <ul>
-                        {usagePanel[user.id].documents.map((doc) => (
-                          <li key={doc.id}>
-                            {doc.title} ({doc.file_type})
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>No documents found.</p>
-                    )}
-                  </div>
-                  <div className="admin-usage-block">
-                    <strong>3) See his/her chats</strong>
-                    {usagePanel[user.id].chats?.length ? (
-                      <ul>
-                        {usagePanel[user.id].chats.map((chat) => (
-                          <li key={chat.session_id}>
-                            {chat.title || `Session ${chat.session_id}`} - {chat.messages?.length || 0} messages
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>No chats found.</p>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ))}
+          {activeUsers.map((user) => renderUserRow(user))}
+          {activeUsers.length === 0 ? <div className="muted-copy">No active users found.</div> : null}
+        </div>
+
+        <h3 style={{ marginTop: "1.25rem" }}>Deleted users</h3>
+        <div className="table-shell">
+          <div className="table-row table-head admin-users-row">
+            <span>User</span>
+            <span>Email</span>
+            <span>Role</span>
+            <span>Usage</span>
+            <span>Controls</span>
+          </div>
+          {deletedUsers.map((user) => renderUserRow(user, { deletedSection: true }))}
+          {deletedUsers.length === 0 ? <div className="muted-copy">No deleted users found.</div> : null}
         </div>
       </section>
     </div>

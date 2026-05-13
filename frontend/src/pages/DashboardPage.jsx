@@ -10,21 +10,19 @@ import { useAuth } from "../context/AuthContext";
 import { getDocuments, getHealth, getMetrics } from "../lib/api";
 import { getRoleDefinition, isManagementRole, ROLE_KEYS } from "../lib/roles";
 /** Chooses the dashboard scope label to show in the UI. */
-function scopeCopy(metrics, userRole) {
-  if (metrics?.scope === "global" || isManagementRole(userRole)) {
+function scopeCopy(metrics) {
+  if (metrics?.scope === "global") {
     return "all users";
+  }
+  if (metrics?.scope === "team") {
+    return "your team";
   }
   return "your account";
 }
 
-/** Counts for type. */
-function countForType(metrics, requestType) {
-  return metrics?.by_request_type?.[requestType]?.request_count ?? 0;
-}
-
 /** Builds metric cards for the next step. */
 function buildMetricCards({ documents, health, metricTotals, metrics, userRole }) {
-  const scope = scopeCopy(metrics, userRole);
+  const scope = scopeCopy(metrics);
   const documentHint = isManagementRole(userRole)
     ? "Documents returned by the documents API for your management role. This can include workspace documents you are allowed to inspect."
     : "Documents returned by the documents API for your role and permissions. Hidden documents are not counted.";
@@ -32,9 +30,9 @@ function buildMetricCards({ documents, health, metricTotals, metrics, userRole }
     {
       label: "API health",
       value: health?.status || "Loading",
-      detail: `Database: ${health?.database || "checking"} | Vector store: ${health?.vector_store || "checking"}`,
+      detail: `Database: ${health?.database || "checking"}`,
       tone: "signal",
-      hint: "Live health response from the backend. It checks the API status, database connection, and vector store availability.",
+      hint: "Live health response from the backend. It checks the API status and database connection.",
     },
     {
       label: "Visible documents",
@@ -51,14 +49,14 @@ function buildMetricCards({ documents, health, metricTotals, metrics, userRole }
       {
         label: "Workspace requests",
         value: metricTotals.request_count ?? 0,
-        detail: `Tracked across ${scope}.`,
+        detail: `Tracked across ${scope}. Errors: ${metricTotals.error_count ?? 0}`,
         tone: "chat",
         hint: "Total logged chat, retrieval, ingestion, and document requests. Admin and Manager roles see the global workspace scope.",
       },
       {
         label: "Estimated cost",
         value: `$${Number(metricTotals.estimated_cost ?? 0).toFixed(6)}`,
-        detail: `Tokens: ${metricTotals.token_total ?? 0} | Errors: ${metricTotals.error_count ?? 0}`,
+        detail: `Tokens: ${metricTotals.token_total ?? 0}`,
         tone: "admin",
         hint: "Estimated cost from logged input and output tokens. It uses the backend telemetry cost formula, so it is an operational estimate.",
       },
@@ -69,11 +67,11 @@ function buildMetricCards({ documents, health, metricTotals, metrics, userRole }
     return [
       ...baseCards,
       {
-        label: "My ingestion requests",
-        value: countForType(metrics, "ingestion"),
-        detail: `Total requests: ${metricTotals.request_count ?? 0}`,
+        label: "Workspace requests",
+        value: metricTotals.request_count ?? 0,
+        detail: `Tracked across ${scope}. Errors: ${metricTotals.error_count ?? 0}`,
         tone: "chat",
-        hint: "Ingestion and document-processing requests logged for your account. Analysts usually see this because they can upload knowledge sources.",
+        hint: "Total logged chat, retrieval, ingestion, and document requests for your current scope.",
       },
       {
         label: "My tokens",
@@ -88,11 +86,11 @@ function buildMetricCards({ documents, health, metricTotals, metrics, userRole }
   return [
     ...baseCards,
     {
-      label: "My chat requests",
-      value: countForType(metrics, "chat"),
-      detail: `Total requests: ${metricTotals.request_count ?? 0}`,
+      label: "Workspace requests",
+      value: metricTotals.request_count ?? 0,
+      detail: `Tracked across ${scope}. Errors: ${metricTotals.error_count ?? 0}`,
       tone: "chat",
-      hint: "Chat requests logged for your own account. Viewer role users only see their personal metrics.",
+      hint: "Total logged chat, retrieval, ingestion, and document requests for your current scope.",
     },
     {
       label: "Avg latency",
