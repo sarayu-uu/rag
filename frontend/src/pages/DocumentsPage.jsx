@@ -32,13 +32,22 @@ export default function DocumentsPage() {
   useEffect(() => {
     loadDocuments();
   }, []);
-  /** Uploads the selected file or form data. */
-  async function handleUpload(files) {
+  /** Uploads selected files or a URL. */
+  async function handleUpload(payload) {
     setBusy(true);
     setError("");
     setSuccess("");
     setPipelineTrace([]);
     try {
+      if (payload?.type === "url") {
+        const response = await uploadDocument({ url: payload.url });
+        setSuccess(`${response.metadata?.document_name || payload.url} uploaded successfully. Document ID: ${response.document_id}`);
+        setPipelineTrace(response.pipeline_trace || []);
+        await loadDocuments();
+        return;
+      }
+
+      const files = payload?.files || [];
       const selectedFiles = Array.isArray(files) ? files : [files];
       if (selectedFiles.length === 1) {
         const response = await uploadDocument({ file: selectedFiles[0] });

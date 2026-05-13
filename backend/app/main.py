@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 # Runs startup and shutdown tasks for the FastAPI app.
+# it runs everytime  the fast api is started 
 async def lifespan(app: FastAPI):
     app.state.database_ready = False
     app.state.database_error = None
@@ -40,7 +41,6 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         app.state.database_error = str(exc)
         logger.warning("Database bootstrap failed during startup: %s", exc)
-
     yield
 
 app = FastAPI(

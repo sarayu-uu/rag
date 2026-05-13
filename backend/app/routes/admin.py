@@ -327,9 +327,28 @@ def update_document_permissions(
         )
 
     if actor_role == RoleName.MANAGER:
-        # Managers can only manage permissions on docs they uploaded.
+        # Managers can manage permissions on:
+        # - docs they uploaded, or
+        # - docs where they have explicit can_edit access (user- or role-level grant).
         if document.upload_user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Managers can only modify permissions for their own uploaded documents.")
+            manager_can_delegate = db.scalar(
+                select(Permission.id).where(
+                    Permission.document_id == document_id,
+                    Permission.can_edit.is_(True),
+                    or_(
+                        Permission.user_id == current_user.id,
+                        Permission.role_id == current_user.role_id,
+                    ),
+                )
+            )
+            if manager_can_delegate is None:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Managers can only modify permissions for their own uploaded documents "
+                        "or documents where they have can_edit access."
+                    ),
+                )
         # Managers can only grant user-specific access to their own analysts.
         if payload.user_id is not None:
             target_role = target_user.role.name if target_user and target_user.role else None

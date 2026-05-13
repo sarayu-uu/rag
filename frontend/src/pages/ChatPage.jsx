@@ -120,6 +120,10 @@ export default function ChatPage() {
     if (!question.trim() || isActiveSessionAtLimit) {
       return;
     }
+    if (selectedDocumentIds.length === 0) {
+      setError("Please select file.");
+      return;
+    }
 
     setSending(true);
     setError("");
