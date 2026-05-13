@@ -521,6 +521,7 @@ def _run_upload_pipeline(
     config = _validate_chunk_form_inputs(chunk_size, chunk_overlap)
     #if any perimissions are given
     parsed_permissions_tags = _parse_permissions_tags(permissions_tags)
+    # if users is not created then create one
     effective_upload_user = upload_user if upload_user is not None else get_or_create_default_ingestion_user(db)
 
     if url:
@@ -609,13 +610,13 @@ def _run_upload_pipeline(
     #check file size and save uplaod in uploads folder
     file_path, file_size, safe_name = _save_upload(file, ext)
     try:
-        file_hash = _compute_file_sha256(file_path)
-        duplicate_id = _find_duplicate_document_id(
+        file_hash = _compute_file_sha256(file_path) # create file hash
+        duplicate_id = _find_duplicate_document_id( # check fr duplicate files
             db,
             upload_user_id=effective_upload_user.id,
             file_hash=file_hash,
         )
-        if duplicate_id is not None:
+        if duplicate_id is not None: #throw error if duplicate file exsists
             try:
                 file_path.unlink(missing_ok=True)
             except OSError:

@@ -56,7 +56,7 @@ class ChatQueryRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=20, description="Maximum number of chunks to retrieve before generation.")
     document_ids: list[int] | None = Field(
         default=None,
-        description="Optional explicit document ids to constrain retrieval.",
+        description="Explicit document ids to constrain retrieval. Empty or omitted is rejected.",
     )
     session_id: int | None = Field(
         default=None,
@@ -113,6 +113,11 @@ def chat_query(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     try:
+        if payload.document_ids is None or len(payload.document_ids) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Select at least one document before asking a question.",
+            )
         #check if vector db is ready
         ensure_vector_store_ready()
         # check what documents is allowed and take only those
@@ -123,16 +128,15 @@ def chat_query(
             fallback_permission_field="can_read",
         )
         scoped_document_ids = retrieval_scope.document_ids
-        if payload.document_ids is not None:
-            requested_ids = [int(document_id) for document_id in payload.document_ids]
-            allowed_set = set(scoped_document_ids)
-            disallowed_ids = [document_id for document_id in requested_ids if document_id not in allowed_set]
-            if disallowed_ids:
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"You do not have query access to document ids: {sorted(set(disallowed_ids))}.",
-                )
-            scoped_document_ids = requested_ids
+        requested_ids = [int(document_id) for document_id in payload.document_ids]
+        allowed_set = set(scoped_document_ids)
+        disallowed_ids = [document_id for document_id in requested_ids if document_id not in allowed_set]
+        if disallowed_ids:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You do not have query access to document ids: {sorted(set(disallowed_ids))}.",
+            )
+        scoped_document_ids = requested_ids
 
         if not scoped_document_ids:
             raise HTTPException(status_code=400, detail="No accessible documents selected for retrieval.")
