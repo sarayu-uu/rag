@@ -13,7 +13,8 @@ from time import perf_counter
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda
 from langsmith import traceable
 
 from app.retrieval.service import hybrid_search_chunk_text
@@ -59,6 +60,18 @@ def _get_prompt_environment() -> Environment:
 def _render_prompt(template_name: str, **context: Any) -> str:
     template = _get_prompt_environment().get_template(template_name)
     return template.render(**context).strip()
+
+
+@lru_cache(maxsize=1)
+def _get_answer_chain():
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "{system_prompt}"),
+            ("human", "{user_prompt}"),
+        ]
+    )
+    # LCEL chain: prompt formatting -> chat model invocation.
+    return prompt | build_chat_model()
 # Removes inline source labels from the answer text.
 def _strip_inline_sources(answer: str) -> str:
     cleaned = (answer or "").strip()
@@ -132,6 +145,29 @@ def _build_formatting_instruction(question: str) -> str:
     if wants_bullets:
         return "Format the answer as concise bullet points."
     return "Use clear paragraph format unless the user explicitly asks for a different structure."
+
+
+def _build_prompt_payload(payload: dict[str, Any]) -> dict[str, str]:
+    question = str(payload.get("question", "")).strip()
+    matches = payload.get("usable_matches", [])
+    memory_context = payload.get("memory_context")
+    system_prompt = _render_prompt("rag_system.jinja2")
+    user_prompt = _render_prompt(
+        "rag_user.jinja2",
+        question=question,
+        matches=matches,
+        memory_context=_normalize_memory_context(memory_context),
+        formatting_instruction=_build_formatting_instruction(question),
+    )
+    return {
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+    }
+
+
+def _extract_answer_payload(response: Any) -> str:
+    answer = response.content if isinstance(response.content, str) else str(response.content)
+    return _strip_inline_sources(answer)
 # Builds sources for the next step.
 def _build_sources(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     sources: list[dict[str, Any]] = []
@@ -219,6 +255,57 @@ def _select_ranked_context(question: str, matches: list[dict[str, Any]], *, limi
             selected.append(candidate)
             seen_ids.add(candidate["id"])
     return selected
+
+
+@lru_cache(maxsize=1)
+def _get_generation_chain():
+    return RunnableLambda(_build_prompt_payload) | _get_answer_chain()
+
+
+def _run_retrieval_step(payload: dict[str, Any]) -> dict[str, Any]:
+    question = str(payload.get("question", "")).strip()
+    limit = int(payload.get("limit", 5) or 5)
+    candidate_limit = max(limit * OVERFETCH_MULTIPLIER, limit)
+    retrieval_payload = hybrid_search_chunk_text(
+        question,
+        limit=candidate_limit,
+        document_ids=payload.get("document_ids"),
+        owner_user_id=payload.get("owner_user_id"),
+    )
+    reranked_matches = retrieval_payload.get("matches", [])
+    selected_matches = _select_ranked_context(question, reranked_matches, limit=limit)
+    return {
+        **payload,
+        "retrieval_payload": retrieval_payload,
+        "reranked_matches": reranked_matches,
+        "selected_matches": selected_matches,
+    }
+
+
+def _run_generation_step(payload: dict[str, Any]) -> dict[str, Any]:
+    selected_matches = payload.get("selected_matches", [])
+    model_start = perf_counter()
+    response = _get_generation_chain().invoke(
+        {
+            "question": payload.get("question", ""),
+            "usable_matches": selected_matches,
+            "memory_context": payload.get("memory_context"),
+        }
+    )
+    model_latency_ms = int((perf_counter() - model_start) * 1000)
+    answer = _extract_answer_payload(response)
+    return {
+        **payload,
+        "answer": answer,
+        "token_usage": _extract_token_usage(response),
+        "model_latency_ms": model_latency_ms,
+    }
+
+
+@lru_cache(maxsize=1)
+def _get_rag_pipeline_chain():
+    # Full LCEL orchestration: retrieval -> context selection -> generation.
+    return RunnableLambda(_run_retrieval_step) | RunnableLambda(_run_generation_step)
 # Answers question from matches.
 @traceable(name="rag_answer_from_matches")
 def answer_question_from_matches(
@@ -241,29 +328,16 @@ def answer_question_from_matches(
             "documents_used": [],
             "match_count": 0,
         }
-    # give system its prompt
-    system_prompt = _render_prompt("rag_system.jinja2")
-    # make user prompt
-    user_prompt = _render_prompt(
-        "rag_user.jinja2",
-        question=cleaned_question,
-        matches=usable_matches,
-        memory_context=_normalize_memory_context(memory_context),
-        formatting_instruction=_build_formatting_instruction(cleaned_question),
-    )
-
     model_start = perf_counter()
-    # gget response
-    response = build_chat_model().invoke(
-        [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt),
-        ]
+    response = _get_generation_chain().invoke(
+        {
+            "question": cleaned_question,
+            "usable_matches": usable_matches,
+            "memory_context": memory_context,
+        }
     )
     model_latency_ms = int((perf_counter() - model_start) * 1000)
-    # take only answer
-    answer = response.content if isinstance(response.content, str) else str(response.content)
-    answer = _strip_inline_sources(answer)
+    answer = _extract_answer_payload(response)
     token_usage = _extract_token_usage(response)
 
     return {
@@ -285,24 +359,27 @@ def answer_question_with_retrieval(
     owner_user_id: int | None = None,
 ) -> dict[str, Any]:
     retrieval_start = perf_counter()
-    candidate_limit = max(limit * OVERFETCH_MULTIPLIER, limit)
-    retrieval_payload = hybrid_search_chunk_text(
-        question,
-        limit=candidate_limit,
-        document_ids=document_ids,
-        owner_user_id=owner_user_id,
+    payload = _get_rag_pipeline_chain().invoke(
+        {
+            "question": question,
+            "limit": limit,
+            "memory_context": memory_context,
+            "document_ids": document_ids,
+            "owner_user_id": owner_user_id,
+        }
     )
-    reranked_matches = retrieval_payload.get("matches", [])
-    # limits the number of matches i.e reranked
-    selected_matches = _select_ranked_context(question, reranked_matches, limit=limit)
-    # store the latency
+    retrieval_payload = payload.get("retrieval_payload", {})
+    reranked_matches = payload.get("reranked_matches", [])
+    selected_matches = payload.get("selected_matches", [])
+    result = {
+        "answer": str(payload.get("answer", "")),
+        "sources": _build_sources(selected_matches),
+        "documents_used": _summarize_documents(selected_matches),
+        "match_count": len(selected_matches),
+        "model_latency_ms": int(payload.get("model_latency_ms", 0) or 0),
+        "token_usage": payload.get("token_usage") or {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+    }
     retrieval_latency_ms = int((perf_counter() - retrieval_start) * 1000)
-    # here llm answers the question
-    result = answer_question_from_matches(
-        question,
-        selected_matches,
-        memory_context=memory_context,
-    )
     # add extra kv pairs
     result["matches"] = selected_matches
     result["retrieved_match_count"] = len(reranked_matches)
@@ -317,7 +394,8 @@ def answer_question_with_retrieval(
         "keyword_retrieval -> app.retrieval.service.keyword_search_chunk_text (LangChain BM25Retriever)",
         "hybrid_fusion -> app.retrieval.service.hybrid_search_chunk_text (LangChain EnsembleRetriever)",
         "context_select -> app.services.rag_chat._select_ranked_context",
-        "answer_generation -> app.services.rag_chat.answer_question_from_matches",
+        "answer_generation -> app.services.rag_chat._get_generation_chain (LCEL)",
+        "orchestration -> app.services.rag_chat._get_rag_pipeline_chain (LCEL)",
     ]
     return result
 

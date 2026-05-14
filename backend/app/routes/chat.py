@@ -27,28 +27,10 @@ from app.services.chat_history import (
     list_chat_sessions,
     serialize_session,
 )
-from app.services.rag_chat import answer_question_from_matches, answer_question_with_retrieval
+from app.services.rag_chat import answer_question_with_retrieval
 from app.telemetry.service import estimate_cost
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-
-class RetrievedMatch(BaseModel):
-    id: str | None = None
-    score: float = Field(default=0.0)
-    document_id: int = Field(..., gt=0)
-    chunk_index: int = Field(..., ge=0)
-    page_number: int | None = None
-    source_name: str = Field(..., min_length=1)
-    content: str = Field(..., min_length=1)
-
-
-class AnswerFromMatchesRequest(BaseModel):
-    question: str = Field(..., min_length=1, description="User question to answer from the provided matches.")
-    matches: list[RetrievedMatch] = Field(
-        default_factory=list,
-        description="Retrieved chunks that should be given to the LLM as grounding context.",
-    )
 
 
 class ChatQueryRequest(BaseModel):
@@ -63,37 +45,6 @@ class ChatQueryRequest(BaseModel):
         ge=1,
         description="Existing chat session id. Omit this to start a new session.",
     )
-
-
-#not used for development
-@router.post(
-    "/answer-from-matches",
-    summary="Phase 5: Generate a grounded answer from provided matches",
-    description=(
-        "Usage: Primarily for testing/manual experiments. "
-        "Purpose: generate an answer from caller-supplied retrieval matches without running retrieval."
-    ),
-)
-# Builds an answer from already retrieved matches.
-def generate_answer_from_matches(
-    payload: AnswerFromMatchesRequest,
-    _: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    try:
-        result = answer_question_from_matches(
-            payload.question,
-            [match.model_dump() for match in payload.matches],
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"LLM answer generation failed: {exc}") from exc
-
-    return {
-        "status": "success",
-        "question": payload.question,
-        **result,
-    }
 
 
 # this is being used 
