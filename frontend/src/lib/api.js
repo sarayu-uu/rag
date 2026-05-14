@@ -250,10 +250,16 @@ export async function openDocumentView(documentId) {
   window.open(blobUrl, "_blank", "noopener,noreferrer");
   setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
 }
-/** Uploads document. */
-export async function uploadDocument({ file, chunkSize = 500, chunkOverlap = 100, permissionsTags = [] }) {
+/** Uploads a document file or URL. */
+export async function uploadDocument({ file = null, url = "", chunkSize = 500, chunkOverlap = 100, permissionsTags = [] }) {
   const formData = new FormData();
-  formData.append("file", file);
+  if (file) {
+    formData.append("file", file);
+  } else if (url && String(url).trim()) {
+    formData.append("url", String(url).trim());
+  } else {
+    throw new Error("Provide either a file or a URL to upload.");
+  }
   formData.append("chunk_size", String(chunkSize));
   formData.append("chunk_overlap", String(chunkOverlap));
   formData.append("permissions_tags", JSON.stringify(permissionsTags));

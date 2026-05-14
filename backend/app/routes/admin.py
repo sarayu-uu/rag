@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
@@ -27,7 +27,6 @@ from app.models.mysql import (
     User,
     get_db,
 )
-from app.retrieval.service import clear_document_vectors
 from app.telemetry.service import estimate_cost
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -74,6 +73,7 @@ def _serialize_user(user: User) -> dict[str, Any]:
         "manager_user_id": user.manager_user_id,
         "manager_username": user.manager.username if getattr(user, "manager", None) else None,
         "is_active": user.is_active,
+        "is_deleted": user.is_deleted,
         "created_at": user.created_at.isoformat(),
         "updated_at": user.updated_at.isoformat(),
     }
@@ -222,8 +222,8 @@ def update_user_role(
 
 @router.delete(
     "/users/{user_id}",
-    summary="Phase 12: Delete a non-admin user",
-    description="Usage: Used by frontend admin users page. Purpose: delete a non-admin user account.",
+    summary="Phase 12: Soft-delete a non-admin user",
+    description="Usage: Used by frontend admin users page. Purpose: mark a non-admin user as deleted while retaining historical data.",
 )
 # Deletes user.
 def delete_user(
@@ -242,40 +242,25 @@ def delete_user(
     if user.id == current_user.id:
         raise HTTPException(status_code=403, detail="You cannot delete your own account.")
 
+    if user.is_deleted:
+        raise HTTPException(status_code=400, detail="User is already deleted.")
+
     serialized_user = _serialize_user(user)
     try:
-        # Collect user-owned document ids first for vector cleanup.
-        owned_document_ids = list(db.scalars(select(Document.id).where(Document.upload_user_id == user.id)).all())
-        for document_id in owned_document_ids:
-            clear_document_vectors(int(document_id))
-
-        # Explicit dependency cleanup for DBs that still use NO ACTION FK rules.
-        db.execute(delete(ChatMessage).where(ChatMessage.user_id == user.id))
-        db.execute(delete(ChatMessage).where(ChatMessage.session_id.in_(select(ChatSession.id).where(ChatSession.user_id == user.id))))
-        db.execute(delete(MetricUsage).where(MetricUsage.user_id == user.id))
-        db.execute(delete(MetricUsage).where(MetricUsage.session_id.in_(select(ChatSession.id).where(ChatSession.user_id == user.id))))
-        db.execute(delete(ChatSession).where(ChatSession.user_id == user.id))
-
-        db.execute(delete(Permission).where(Permission.user_id == user.id))
-        db.execute(delete(Permission).where(Permission.granted_by == user.id))
-        db.execute(delete(Permission).where(Permission.document_id.in_(select(Document.id).where(Document.upload_user_id == user.id))))
-
-        db.execute(delete(DocumentChunk).where(DocumentChunk.owner_user_id == user.id))
-        db.execute(delete(DocumentChunk).where(DocumentChunk.document_id.in_(select(Document.id).where(Document.upload_user_id == user.id))))
-        db.execute(delete(Document).where(Document.upload_user_id == user.id))
-
-        db.delete(user)
+        # Soft-delete only. Keep chats/documents/metrics for audit and historical reporting.
+        user.is_deleted = True
+        user.is_active = False
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to delete user from MySQL: {exc}") from exc
+        raise HTTPException(status_code=500, detail=f"Failed to soft-delete user in MySQL: {exc}") from exc
     except Exception as exc:
         db.rollback()
-        raise HTTPException(status_code=502, detail=f"Failed to delete user dependencies: {exc}") from exc
+        raise HTTPException(status_code=502, detail=f"Failed to soft-delete user: {exc}") from exc
 
     return {
         "status": "success",
-        "message": "User deleted successfully.",
+        "message": "User soft-deleted successfully.",
         "user": serialized_user,
     }
 
@@ -304,6 +289,8 @@ def update_document_permissions(
         target_user = db.scalar(select(User).options(joinedload(User.role)).where(User.id == payload.user_id))
     if payload.user_id is not None and target_user is None:
         raise HTTPException(status_code=404, detail=f"User {payload.user_id} was not found.")
+    if target_user is not None and target_user.is_deleted:
+        raise HTTPException(status_code=400, detail="Cannot grant permissions to a deleted user.")
 
     role_id = payload.role_id
     if payload.role is not None:
@@ -327,9 +314,28 @@ def update_document_permissions(
         )
 
     if actor_role == RoleName.MANAGER:
-        # Managers can only manage permissions on docs they uploaded.
+        # Managers can manage permissions on:
+        # - docs they uploaded, or
+        # - docs where they have explicit can_edit access (user- or role-level grant).
         if document.upload_user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Managers can only modify permissions for their own uploaded documents.")
+            manager_can_delegate = db.scalar(
+                select(Permission.id).where(
+                    Permission.document_id == document_id,
+                    Permission.can_edit.is_(True),
+                    or_(
+                        Permission.user_id == current_user.id,
+                        Permission.role_id == current_user.role_id,
+                    ),
+                )
+            )
+            if manager_can_delegate is None:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Managers can only modify permissions for their own uploaded documents "
+                        "or documents where they have can_edit access."
+                    ),
+                )
         # Managers can only grant user-specific access to their own analysts.
         if payload.user_id is not None:
             target_role = target_user.role.name if target_user and target_user.role else None
@@ -349,6 +355,8 @@ def update_document_permissions(
             .where(
                 User.manager_user_id == current_user.id,
                 User.role.has(Role.name == RoleName.ANALYST),
+                User.is_active.is_(True),
+                User.is_deleted.is_(False),
             )
         ).all()
         updated_permissions: list[Permission] = []

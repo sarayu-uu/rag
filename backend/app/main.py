@@ -16,9 +16,7 @@ from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
 from app.routes.chat import router as chat_router
 from app.routes.documents import router as documents_router
-from app.routes.ingestion_steps import router as ingestion_steps_router
 from app.routes.metrics import router as metrics_router
-from app.routes.retrieval import router as retrieval_router
 from app.routes.test_eval import router as test_eval_router
 from app.retrieval.chroma_store import vector_store_health
 from app.telemetry.middleware import telemetry_middleware
@@ -28,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 # Runs startup and shutdown tasks for the FastAPI app.
+# it runs everytime  the fast api is started 
 async def lifespan(app: FastAPI):
     app.state.database_ready = False
     app.state.database_error = None
@@ -40,7 +39,6 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         app.state.database_error = str(exc)
         logger.warning("Database bootstrap failed during startup: %s", exc)
-
     yield
 
 app = FastAPI(
@@ -63,8 +61,9 @@ app.middleware("http")(telemetry_middleware)
 
 app.include_router(auth_router)
 app.include_router(documents_router)
-app.include_router(ingestion_steps_router)
-app.include_router(retrieval_router)
+# Frontend-unused debug/stepwise ingestion routes are intentionally disabled.
+# Shared ingestion helper logic remains available through /documents/upload endpoints.
+# app.include_router(ingestion_steps_router)
 app.include_router(chat_router)
 app.include_router(admin_router)
 app.include_router(metrics_router)

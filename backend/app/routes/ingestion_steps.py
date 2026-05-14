@@ -12,18 +12,15 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
 import shutil
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.auth.security import get_current_user, is_privileged_user
 from app.config.settings import UPLOAD_DIR
 from app.ingestion.chunking import (
     ChunkingConfig,
@@ -48,21 +45,6 @@ from app.retrieval.service import sync_document_chunks_to_vector_store
 
 router = APIRouter(prefix="/ingestion", tags=["ingestion-steps"])
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-
-class CleanTextRequest(BaseModel):
-    document_id: int = Field(..., gt=0, description="Document id returned by /ingestion/load.")
-    text: str = Field(..., description="Raw extracted text returned by /ingestion/load.")
-
-
-class ChunkTextRequest(BaseModel):
-    document_id: int = Field(..., gt=0, description="Document id returned by /ingestion/load.")
-    text: str = Field(..., description="Cleaned text returned by /ingestion/clean.")
-    source_name: str = Field(default="", description="Optional source label stored with each chunk.")
-    owner_user_id: int | None = Field(default=None, description="Optional owner id stored with each chunk.")
-    permissions_tags: list[str] = Field(default_factory=list, description="Optional permission tags for chunk metadata.")
-    chunk_size: int = Field(default=500, description="Maximum chunk length before splitting.")
-    chunk_overlap: int = Field(default=100, description="Character overlap between adjacent chunks.")
 
 
 # Cleans the incoming URL value from form data.
@@ -274,18 +256,6 @@ def _build_chunks_for_document(
     )
 
 
-# Loads one document from MySQL and raises `404` if it does not exist
-# or the current user is not allowed to access it.
-# Gets document or 404.
-def _get_document_or_404(db: Session, document_id: int, *, current_user: User | None = None) -> Document:
-    document = db.scalar(select(Document).where(Document.id == document_id))
-    if document is None:
-        raise HTTPException(status_code=404, detail=f"document_id {document_id} was not found.")
-    if current_user is not None and not is_privileged_user(current_user) and document.upload_user_id != current_user.id:
-        raise HTTPException(status_code=404, detail=f"document_id {document_id} was not found.")
-    return document
-
-
 # Converts saved chunk ORM objects into plain dictionaries
 # so they can be returned cleanly in API responses.
 # Converts chunks into a response-friendly format.
@@ -320,141 +290,6 @@ def _index_saved_chunks(document_id: int, saved_chunks: list[Any]) -> dict[str, 
                 "Use /retrieval/reindex/{document_id} after fixing the vector-store issue."
             ),
         ) from exc
-
-
-@router.post(
-    "/load",
-    summary="Step 1: Load input and extract raw text",
-    description=(
-        "Debug endpoint `/ingestion/load`. "
-        "Use it to extract raw text and create an initial document record without running the full pipeline."
-    ),
-)
-# Step 1 of the debug ingestion flow.
-# It loads a file or URL, extracts raw text, and creates the first document row in MySQL.
-def step_load(
-    file: UploadFile | None = File(default=None),
-    url: str | None = Form(default=None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    url = _normalize_url_input(url)
-    _single_input_guard(file, url)
-    upload_user = current_user if current_user is not None else get_or_create_default_ingestion_user(db)
-
-    if url:
-        try:
-            result = load_url_with_metadata(url)
-            raw_text = result["text"]
-            metadata = result["metadata"]
-            validate_extracted_content(raw_text)
-            url_hash = _compute_text_sha256(raw_text)
-            duplicate_id = _find_duplicate_document_id(
-                db,
-                upload_user_id=upload_user.id,
-                file_hash=url_hash,
-            )
-            if duplicate_id is not None:
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"Duplicate content detected. Existing document_id: {duplicate_id}.",
-                )
-            document_payload = build_document_record_payload(
-                source="url",
-                storage_path=url,
-                file_type=metadata["file_type"],
-                upload_user_id=upload_user.id,
-                source_url=url,
-                file_hash=url_hash,
-                document_name=metadata["document_name"],
-                page_numbers=metadata["page_numbers"],
-            )
-            document = save_document_record(db, document_payload)
-            db.commit()
-            db.refresh(document)
-        except ValueError as exc:
-            db.rollback()
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except SQLAlchemyError as exc:
-            db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to persist the document record for the loaded URL.",
-            ) from exc
-
-        return {
-            "status": "success",
-            "message": "Raw text extraction completed.",
-            "source": "url",
-            "metadata": metadata,
-            "document_id": document.id,
-            "upload_user_id": document.upload_user_id,
-            "raw_text": raw_text,
-            "raw_text_preview": raw_text[:1200],
-        }
-
-    if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="No file received.")
-
-    ext = validate_file_type(file.filename)
-    file_path, file_size, safe_name = _save_upload(file, ext)
-    try:
-        file_hash = _compute_file_sha256(file_path)
-        duplicate_id = _find_duplicate_document_id(
-            db,
-            upload_user_id=upload_user.id,
-            file_hash=file_hash,
-        )
-        if duplicate_id is not None:
-            try:
-                file_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            raise HTTPException(
-                status_code=409,
-                detail=f"Duplicate content detected. Existing document_id: {duplicate_id}.",
-            )
-        result = load_file_with_metadata(file_path, document_name=Path(file.filename).name)
-        raw_text = result["text"]
-        metadata = result["metadata"]
-        validate_extracted_content(raw_text)
-        document_payload = build_document_record_payload(
-            source="file",
-            storage_path=str(file_path),
-            file_type=metadata["file_type"],
-            upload_user_id=upload_user.id,
-            source_url=None,
-            file_hash=file_hash,
-            document_name=metadata["document_name"],
-            page_numbers=metadata["page_numbers"],
-        )
-        document = save_document_record(db, document_payload)
-        db.commit()
-        db.refresh(document)
-    except ValueError as exc:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to persist the document record for the loaded file.",
-        ) from exc
-
-    return {
-        "status": "success",
-        "message": "Raw text extraction completed.",
-        "source": "file",
-        "metadata": {
-            **metadata,
-            "stored_as": safe_name,
-            "size_bytes": file_size,
-        },
-        "document_id": document.id,
-        "upload_user_id": document.upload_user_id,
-        "raw_text": raw_text,
-        "raw_text_preview": raw_text[:1200],
-    }
 
 
 # Builds the final API response for upload endpoints.
@@ -521,6 +356,7 @@ def _run_upload_pipeline(
     config = _validate_chunk_form_inputs(chunk_size, chunk_overlap)
     #if any perimissions are given
     parsed_permissions_tags = _parse_permissions_tags(permissions_tags)
+    # if users is not created then create one
     effective_upload_user = upload_user if upload_user is not None else get_or_create_default_ingestion_user(db)
 
     if url:
@@ -609,13 +445,13 @@ def _run_upload_pipeline(
     #check file size and save uplaod in uploads folder
     file_path, file_size, safe_name = _save_upload(file, ext)
     try:
-        file_hash = _compute_file_sha256(file_path)
-        duplicate_id = _find_duplicate_document_id(
+        file_hash = _compute_file_sha256(file_path) # create file hash
+        duplicate_id = _find_duplicate_document_id( # check fr duplicate files
             db,
             upload_user_id=effective_upload_user.id,
             file_hash=file_hash,
         )
-        if duplicate_id is not None:
+        if duplicate_id is not None: #throw error if duplicate file exsists
             try:
                 file_path.unlink(missing_ok=True)
             except OSError:
@@ -704,242 +540,4 @@ def _run_upload_pipeline(
     return response
 
 
-@router.post(
-    "/uploadtochunk",
-    summary="Step 1 to 3: Load, clean, and chunk in one request",
-    description=(
-        "Debug endpoint `/ingestion/uploadtochunk`. "
-        "Runs load + clean + chunk and saves chunks in MySQL without vector indexing."
-    ),
-)
-# Debug upload flow that stops before vector indexing.
-# Useful when you want to inspect cleaned text and stored chunks first.
-# Uploads to chunk.
-def upload_to_chunk(
-    response: Response,
-    file: UploadFile | None = File(default=None),
-    url: str | None = Form(default=None),
-    permissions_tags: str | None = Form(default=None),
-    chunk_size: int = Form(default=500),
-    chunk_overlap: int = Form(default=100),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    started = perf_counter()
-    payload = _run_upload_pipeline(
-        file=file,
-        url=url,
-        permissions_tags=permissions_tags,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        db=db,
-        index_in_vector_store=False,
-        upload_user=current_user,
-    )
-    if response is not None:
-        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - started) * 1000))
-    return payload
-
-
-@router.post(
-    "/upload",
-    summary="Default upload: store document, chunks, and vectors automatically",
-    description=(
-        "Usable endpoint `/ingestion/upload`. "
-        "Runs the full ingestion flow and stores chunks in MySQL and Chroma."
-    ),
-)
-# Full ingestion endpoint in this route file.
-# It saves the document, creates chunks, and indexes them in the vector DB.
-# Uploads document.
-def upload_document(
-    response: Response,
-    file: UploadFile | None = File(default=None),
-    url: str | None = Form(default=None),
-    permissions_tags: str | None = Form(default=None),
-    chunk_size: int = Form(default=500),
-    chunk_overlap: int = Form(default=100),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    started = perf_counter()
-    payload = _run_upload_pipeline(
-        file=file,
-        url=url,
-        permissions_tags=permissions_tags,
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        db=db,
-        index_in_vector_store=True,
-        upload_user=current_user,
-    )
-    if response is not None:
-        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - started) * 1000))
-    return payload
-
-
-@router.post(
-    "/upload-batch",
-    summary="Batch upload: store multiple documents, chunks, and vectors",
-    description=(
-        "Usable endpoint `/ingestion/upload-batch`. "
-        "Processes multiple uploaded files in one request and indexes each successful document."
-    ),
-)
-# Batch version of the upload pipeline.
-# It loops through many files and returns which ones succeeded or failed.
-# Uploads documents batch.
-def upload_documents_batch(
-    response: Response,
-    files: list[UploadFile] = File(default_factory=list),
-    permissions_tags: str | None = Form(default=None),
-    chunk_size: int = Form(default=500),
-    chunk_overlap: int = Form(default=100),
-    db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    started = perf_counter()
-    if not files:
-        raise HTTPException(status_code=400, detail="No files received. Use form field name 'files'.")
-
-    results: list[dict[str, Any]] = []
-    success_count = 0
-    failure_count = 0
-
-    for file in files:
-        filename = file.filename or "unknown"
-        try:
-            pipeline_result = _run_upload_pipeline(
-                file=file,
-                url=None,
-                permissions_tags=permissions_tags,
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap,
-                db=db,
-                index_in_vector_store=True,
-            )
-            results.append(
-                {
-                    "file_name": filename,
-                    "status": "success",
-                    "document_id": pipeline_result.get("document_id"),
-                    "chunk_count": pipeline_result.get("chunk_count", 0),
-                    "vector_indexed": pipeline_result.get("vector_indexed", False),
-                    "message": pipeline_result.get("message"),
-                }
-            )
-            success_count += 1
-        except HTTPException as exc:
-            db.rollback()
-            results.append(
-                {
-                    "file_name": filename,
-                    "status": "failed",
-                    "detail": str(exc.detail),
-                    "status_code": exc.status_code,
-                }
-            )
-            failure_count += 1
-        except Exception as exc:
-            db.rollback()
-            results.append(
-                {
-                    "file_name": filename,
-                    "status": "failed",
-                    "detail": str(exc),
-                    "status_code": 500,
-                }
-            )
-            failure_count += 1
-
-    payload = {
-        "status": "success" if failure_count == 0 else "partial_success",
-        "total_files": len(files),
-        "processed_files": success_count + failure_count,
-        "success_count": success_count,
-        "failure_count": failure_count,
-        "results": results,
-    }
-    if response is not None:
-        response.headers["X-Telemetry-Ingestion-Time-Ms"] = str(int((perf_counter() - started) * 1000))
-    return payload
-
-
-@router.post(
-    "/clean",
-    summary="Step 2: Clean and normalize extracted text",
-    description="Debug endpoint `/ingestion/clean`. Cleans extracted text before chunking.",
-)
-# Step 2 of the debug ingestion flow.
-# It cleans extracted text and returns the cleaned result.
-def step_clean(
-    payload: CleanTextRequest,
-    _: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    cleaned = clean_text(payload.text)
-    validate_extracted_content(cleaned)
-    return {
-        "status": "success",
-        "message": "Text cleaning completed.",
-        "source": "text",
-        "document_id": payload.document_id,
-        "cleaned_text_preview": cleaned[:1200],
-        "cleaned_text": cleaned,
-    }
-
-
-@router.post(
-    "/chunk",
-    summary="Step 3: Chunk cleaned text with metadata",
-    description=(
-        "Debug endpoint `/ingestion/chunk`. "
-        "Chunks cleaned text, saves chunk rows, and indexes them in the vector DB."
-    ),
-)
-# Step 3 of the debug ingestion flow.
-# It takes cleaned text, turns it into chunks, saves them, and indexes them.
-def step_chunk(
-    payload: ChunkTextRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    config = _validate_chunk_form_inputs(payload.chunk_size, payload.chunk_overlap)
-    document = _get_document_or_404(db, payload.document_id, current_user=current_user)
-    source_name = payload.source_name.strip() or document.title
-    owner_user_id = payload.owner_user_id if payload.owner_user_id is not None else document.upload_user_id
-
-    try:
-        chunks = _build_chunks_for_document(
-            document,
-            cleaned_text=payload.text,
-            source_name=source_name,
-            owner_user_id=owner_user_id,
-            permissions_tags=payload.permissions_tags,
-            config=config,
-        )
-        saved_chunks = replace_document_chunks(db, document_id=document.id, chunks=chunks)
-        document.status = DocumentStatus.PROCESSED
-        db.commit()
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to persist document chunks in MySQL.",
-        ) from exc
-
-    index_result = _index_saved_chunks(document.id, saved_chunks)
-
-    return {
-        "status": "success",
-        "message": "Chunking completed, stored in MySQL, and indexed in Chroma.",
-        "source": "text",
-        "document_id": document.id,
-        "chunking_strategy": "semantic",
-        "chunk_count": len(saved_chunks),
-        "vector_indexed": True,
-        "vector_collection": index_result.get("collection"),
-        "cleaned_text_preview": payload.text[:1200],
-        "chunks": _serialize_chunks(saved_chunks),
-    }
 

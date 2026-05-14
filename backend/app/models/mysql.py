@@ -111,6 +111,7 @@ class User(Base):
         index=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -391,6 +392,14 @@ def ensure_schema_updates() -> None:
                     "ADD CONSTRAINT fk_users_manager_user_id "
                     "FOREIGN KEY (manager_user_id) REFERENCES users(id) "
                     "ON DELETE SET NULL"
+                )
+            )
+
+        if "users" in table_names and "is_deleted" not in user_columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE users "
+                    "ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT 0"
                 )
             )
 

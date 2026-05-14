@@ -24,6 +24,8 @@ export default function ChatPage() {
   const [deletingSessionId, setDeletingSessionId] = useState(null);
   const [error, setError] = useState("");
   const [pipelineTrace, setPipelineTrace] = useState([]);
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [qaInsightsByAssistantId, setQaInsightsByAssistantId] = useState({});
   const activeSession = sessions.find((session) => session.session_id === activeSessionId) || null;
   const activeSessionPercent = activeSession?.token_limit
     ? Math.min(100, Math.round(((activeSession?.tokens_used_total ?? 0) / Math.max(activeSession.token_limit, 1)) * 100))
@@ -64,13 +66,16 @@ export default function ChatPage() {
     setError("");
     try {
       const response = await getChatMessages(sessionId);
+      const loadedMessages = response.messages || [];
       setActiveSessionId(sessionId);
-      setMessages(response.messages || []);
+      setMessages(loadedMessages);
       if (!options.keepAnswerPayload) {
         setAnswerPayload(null);
       }
+      return loadedMessages;
     } catch (messageError) {
       setError(messageError.message || "Failed to load session.");
+      return [];
     } finally {
       setLoadingMessages(false);
     }
@@ -89,6 +94,11 @@ export default function ChatPage() {
       current.includes(documentId) ? current.filter((id) => id !== documentId) : [...current, documentId]
     );
   }
+
+  const normalizedDocumentSearch = documentSearch.trim().toLowerCase();
+  const filteredDocuments = documents.filter((document) =>
+    String(document?.title || "").toLowerCase().includes(normalizedDocumentSearch)
+  );
   /** Deletes the selected chat session. */
   async function handleDeleteSession(session) {
     const confirmed = window.confirm(`Delete chat session "${session.title || `Session ${session.session_id}`}"?`);
@@ -120,6 +130,10 @@ export default function ChatPage() {
     if (!question.trim() || isActiveSessionAtLimit) {
       return;
     }
+    if (selectedDocumentIds.length === 0) {
+      setError("Please select file.");
+      return;
+    }
 
     setSending(true);
     setError("");
@@ -137,7 +151,22 @@ export default function ChatPage() {
       await loadSessions();
       const nextSessionId = response.session?.session_id;
       if (nextSessionId) {
-        await openSession(nextSessionId, { keepAnswerPayload: true });
+        const loadedMessages = await openSession(nextSessionId, { keepAnswerPayload: true });
+        const latestAssistant = [...loadedMessages].reverse().find((message) => String(message?.role || "").toUpperCase() === "ASSISTANT");
+        if (latestAssistant?.id) {
+          const tokenUsage = response.token_usage || {};
+          setQaInsightsByAssistantId((previous) => ({
+            ...previous,
+            [latestAssistant.id]: {
+              question: response.question || question.trim(),
+              inputTokens: Number(tokenUsage.input_tokens || 0),
+              outputTokens: Number(tokenUsage.output_tokens || 0),
+              totalTokens: Number(tokenUsage.total_tokens || 0),
+              chunks: response.matches || [],
+              retrievedMatchCount: Number(response.retrieved_match_count || 0),
+            },
+          }));
+        }
       }
     } catch (chatError) {
       setError(chatError.message || "Chat request failed.");
@@ -176,7 +205,12 @@ export default function ChatPage() {
         />
 
         <div className="chat-center-column">
-          <ChatTranscript messages={messages} pendingAnswer={sending ? "Generating a grounded answer..." : ""} loading={loadingMessages}>
+          <ChatTranscript
+            messages={messages}
+            pendingAnswer={sending ? "Generating a grounded answer..." : ""}
+            loading={loadingMessages}
+            qaInsightsByAssistantId={qaInsightsByAssistantId}
+          >
             <form className="compact-form" onSubmit={handleAsk}>
               {isActiveSessionAtLimit ? <div className="error-banner">100% chat used. Start a new chat to continue.</div> : null}
               <label>
@@ -197,14 +231,42 @@ export default function ChatPage() {
                       : "All accessible documents"}
                   </small>
                 </div>
+                <div className="document-filter-meta">
+                  <small>{documents.length} total</small>
+                  <small>{filteredDocuments.length} visible</small>
+                </div>
+                <label className="document-filter-search">
+                  <input
+                    type="text"
+                    value={documentSearch}
+                    onChange={(event) => setDocumentSearch(event.target.value)}
+                    placeholder="Search documents..."
+                  />
+                </label>
                 <div className="document-filter-actions">
                   <button
                     type="button"
                     className="ghost-button document-filter-action"
-                    onClick={() => setSelectedDocumentIds(documents.map((document) => document.id))}
-                    disabled={documents.length === 0}
+                    onClick={() =>
+                      setSelectedDocumentIds((current) =>
+                        Array.from(new Set([...current, ...filteredDocuments.map((document) => document.id)]))
+                      )
+                    }
+                    disabled={filteredDocuments.length === 0}
                   >
-                    Select all
+                    Select visible
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button document-filter-action"
+                    onClick={() =>
+                      setSelectedDocumentIds((current) =>
+                        current.filter((id) => !filteredDocuments.some((document) => document.id === id))
+                      )
+                    }
+                    disabled={filteredDocuments.length === 0}
+                  >
+                    Clear visible
                   </button>
                   <button
                     type="button"
@@ -212,14 +274,16 @@ export default function ChatPage() {
                     onClick={() => setSelectedDocumentIds([])}
                     disabled={selectedDocumentIds.length === 0}
                   >
-                    Clear
+                    Clear all
                   </button>
                 </div>
                 <div className="document-filter-list">
                   {documents.length === 0 ? (
                     <small>No documents available for selection.</small>
+                  ) : filteredDocuments.length === 0 ? (
+                    <small>No documents match your search.</small>
                   ) : (
-                    documents.map((document) => (
+                    filteredDocuments.map((document) => (
                       <label key={document.id} className="document-filter-item">
                         <input
                           type="checkbox"

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import exists, or_, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.mysql import Document, Permission, Role, RoleName, User
@@ -30,13 +30,28 @@ def _has_global_document_access(user: User, *, permission_field: str) -> bool:
 
 def _explicit_permission_exists_clause(user: User, *, permission_field: str):
     permission_column = getattr(Permission, permission_field)
+    explicit_user_access = and_(
+        Permission.user_id == user.id,
+        exists(
+            select(User.id).where(
+                User.id == Permission.user_id,
+                User.is_active.is_(True),
+                User.is_deleted.is_(False),
+            )
+        ),
+    )
+    explicit_role_access = and_(
+        Permission.role_id == user.role_id,
+        user.is_active is True,
+        user.is_deleted is False,
+    )
     return exists(
         select(Permission.id).where(
             Permission.document_id == Document.id,
             permission_column.is_(True),
             or_(
-                Permission.user_id == user.id,
-                Permission.role_id == user.role_id,
+                explicit_user_access,
+                explicit_role_access,
             ),
         )
     )
@@ -58,6 +73,8 @@ def document_access_filter(user: User, *, permission_field: str):
                 User.id == Document.upload_user_id,
                 User.manager_user_id == user.id,
                 User.role.has(Role.name == RoleName.ANALYST),
+                User.is_active.is_(True),
+                User.is_deleted.is_(False),
             )
         )
         return or_(
@@ -75,6 +92,8 @@ def document_access_filter(user: User, *, permission_field: str):
             select(User.id).where(
                 User.id == Document.upload_user_id,
                 User.id == user.manager_user_id,
+                User.is_active.is_(True),
+                User.is_deleted.is_(False),
             )
         )
         return or_(

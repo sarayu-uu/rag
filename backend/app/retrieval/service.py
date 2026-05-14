@@ -7,8 +7,10 @@ File purpose:
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from typing import Any
 
+from langchain_core.runnables import RunnableLambda
 from sqlalchemy import select
 
 from app.models.mysql import DocumentChunk, SessionLocal
@@ -363,14 +365,25 @@ def keyword_search_chunk_text(
     return ranked[:limit]
 
 
-def hybrid_search_chunk_text(
-    query: str,
+def _merge_unique_matches(
+    semantic_matches: list[dict[str, Any]],
+    keyword_matches: list[dict[str, Any]],
     *,
     limit: int,
-    document_id: int | None = None,
-    document_ids: list[int] | None = None,
-    owner_user_id: int | None = None,
-) -> dict[str, Any]:
+) -> list[dict[str, Any]]:
+    merged = {str(item["id"]): item for item in semantic_matches}
+    for item in keyword_matches:
+        merged.setdefault(str(item["id"]), item)
+    return list(merged.values())[:limit]
+
+
+def _run_semantic_keyword_step(payload: dict[str, Any]) -> dict[str, Any]:
+    query = str(payload.get("query", "")).strip()
+    limit = int(payload.get("limit", 5) or 5)
+    document_id = payload.get("document_id")
+    document_ids = payload.get("document_ids")
+    owner_user_id = payload.get("owner_user_id")
+
     semantic_matches = search_chunk_text(
         query,
         limit=limit,
@@ -386,18 +399,29 @@ def hybrid_search_chunk_text(
         owner_user_id=owner_user_id,
     )
 
+    return {
+        **payload,
+        "semantic_matches": semantic_matches,
+        "keyword_matches": keyword_matches,
+    }
+
+
+def _run_hybrid_fusion_step(payload: dict[str, Any]) -> dict[str, Any]:
+    query = str(payload.get("query", "")).strip()
+    limit = int(payload.get("limit", 5) or 5)
+    document_id = payload.get("document_id")
+    document_ids = payload.get("document_ids")
+    owner_user_id = payload.get("owner_user_id")
+    semantic_matches = payload.get("semantic_matches", [])
+    keyword_matches = payload.get("keyword_matches", [])
+
     try:
         from langchain.retrievers import EnsembleRetriever
     except Exception:
-        merged = {str(item["id"]): item for item in semantic_matches}
-        for item in keyword_matches:
-            merged.setdefault(str(item["id"]), item)
-        ranked = list(merged.values())[:limit]
+        ranked = _merge_unique_matches(semantic_matches, keyword_matches, limit=limit)
         return {
-            "matches": ranked,
-            "semantic_match_count": len(semantic_matches),
-            "keyword_match_count": len(keyword_matches),
-            "hybrid_match_count": len(ranked),
+            **payload,
+            "ranked_matches": ranked,
         }
 
     chunks = _fetch_scoped_chunks(
@@ -430,15 +454,10 @@ def hybrid_search_chunk_text(
         semantic_retriever = None
 
     if semantic_retriever is None or bm25 is None:
-        merged = {str(item["id"]): item for item in semantic_matches}
-        for item in keyword_matches:
-            merged.setdefault(str(item["id"]), item)
-        ranked = list(merged.values())[:limit]
+        ranked = _merge_unique_matches(semantic_matches, keyword_matches, limit=limit)
         return {
-            "matches": ranked,
-            "semantic_match_count": len(semantic_matches),
-            "keyword_match_count": len(keyword_matches),
-            "hybrid_match_count": len(ranked),
+            **payload,
+            "ranked_matches": ranked,
         }
 
     ensemble = EnsembleRetriever(
@@ -468,6 +487,39 @@ def hybrid_search_chunk_text(
         )
         if len(ranked) >= limit:
             break
+
+    return {
+        **payload,
+        "ranked_matches": ranked,
+    }
+
+
+@lru_cache(maxsize=1)
+def _get_hybrid_retrieval_chain():
+    # LCEL orchestration for hybrid retrieval: semantic+keyword -> fusion.
+    return RunnableLambda(_run_semantic_keyword_step) | RunnableLambda(_run_hybrid_fusion_step)
+
+
+def hybrid_search_chunk_text(
+    query: str,
+    *,
+    limit: int,
+    document_id: int | None = None,
+    document_ids: list[int] | None = None,
+    owner_user_id: int | None = None,
+) -> dict[str, Any]:
+    chain_payload = _get_hybrid_retrieval_chain().invoke(
+        {
+            "query": query,
+            "limit": limit,
+            "document_id": document_id,
+            "document_ids": document_ids,
+            "owner_user_id": owner_user_id,
+        }
+    )
+    semantic_matches = chain_payload.get("semantic_matches", [])
+    keyword_matches = chain_payload.get("keyword_matches", [])
+    ranked = chain_payload.get("ranked_matches", [])
 
     return {
         "matches": ranked,

@@ -29,6 +29,10 @@ export default function ProfilePage() {
           </div>
           <div className="profile-grid">
             <div>
+              <span>User ID</span>
+              <strong>{user?.id ?? "-"}</strong>
+            </div>
+            <div>
               <span>Username</span>
               <strong>{user?.username}</strong>
             </div>
@@ -40,22 +44,7 @@ export default function ProfilePage() {
               <span>Role</span>
               <strong>{role.label}</strong>
             </div>
-            <div>
-              <span>Active</span>
-              <strong>{String(user?.is_active)}</strong>
-            </div>
           </div>
-        </article>
-
-        <article className="feature-card">
-          <div className="feature-card-header">
-            <div>
-              <p className="eyebrow">Role summary</p>
-              <h2>{role.label}</h2>
-            </div>
-          </div>
-          <p className="section-copy">{role.description}</p>
-          <div className="role-chip large">{role.tone}</div>
         </article>
       </section>
     </div>

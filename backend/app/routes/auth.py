@@ -62,6 +62,7 @@ def _serialize_user(user: User) -> dict[str, Any]:
         "email": user.email,
         "role": user.role.name.value if user.role else None,
         "is_active": user.is_active,
+        "is_deleted": user.is_deleted,
         "created_at": user.created_at.isoformat(),
         "updated_at": user.updated_at.isoformat(),
     }

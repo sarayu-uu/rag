@@ -27,28 +27,10 @@ from app.services.chat_history import (
     list_chat_sessions,
     serialize_session,
 )
-from app.services.rag_chat import answer_question_from_matches, answer_question_with_retrieval
+from app.services.rag_chat import answer_question_with_retrieval
 from app.telemetry.service import estimate_cost
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-
-class RetrievedMatch(BaseModel):
-    id: str | None = None
-    score: float = Field(default=0.0)
-    document_id: int = Field(..., gt=0)
-    chunk_index: int = Field(..., ge=0)
-    page_number: int | None = None
-    source_name: str = Field(..., min_length=1)
-    content: str = Field(..., min_length=1)
-
-
-class AnswerFromMatchesRequest(BaseModel):
-    question: str = Field(..., min_length=1, description="User question to answer from the provided matches.")
-    matches: list[RetrievedMatch] = Field(
-        default_factory=list,
-        description="Retrieved chunks that should be given to the LLM as grounding context.",
-    )
 
 
 class ChatQueryRequest(BaseModel):
@@ -56,44 +38,13 @@ class ChatQueryRequest(BaseModel):
     limit: int = Field(default=5, ge=1, le=20, description="Maximum number of chunks to retrieve before generation.")
     document_ids: list[int] | None = Field(
         default=None,
-        description="Optional explicit document ids to constrain retrieval.",
+        description="Explicit document ids to constrain retrieval. Empty or omitted is rejected.",
     )
     session_id: int | None = Field(
         default=None,
         ge=1,
         description="Existing chat session id. Omit this to start a new session.",
     )
-
-
-#not used for development
-@router.post(
-    "/answer-from-matches",
-    summary="Phase 5: Generate a grounded answer from provided matches",
-    description=(
-        "Usage: Primarily for testing/manual experiments. "
-        "Purpose: generate an answer from caller-supplied retrieval matches without running retrieval."
-    ),
-)
-# Builds an answer from already retrieved matches.
-def generate_answer_from_matches(
-    payload: AnswerFromMatchesRequest,
-    _: User = Depends(get_current_user),
-) -> dict[str, Any]:
-    try:
-        result = answer_question_from_matches(
-            payload.question,
-            [match.model_dump() for match in payload.matches],
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"LLM answer generation failed: {exc}") from exc
-
-    return {
-        "status": "success",
-        "question": payload.question,
-        **result,
-    }
 
 
 # this is being used 
@@ -113,6 +64,11 @@ def chat_query(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
     try:
+        if payload.document_ids is None or len(payload.document_ids) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Select at least one document before asking a question.",
+            )
         #check if vector db is ready
         ensure_vector_store_ready()
         # check what documents is allowed and take only those
@@ -123,16 +79,15 @@ def chat_query(
             fallback_permission_field="can_read",
         )
         scoped_document_ids = retrieval_scope.document_ids
-        if payload.document_ids is not None:
-            requested_ids = [int(document_id) for document_id in payload.document_ids]
-            allowed_set = set(scoped_document_ids)
-            disallowed_ids = [document_id for document_id in requested_ids if document_id not in allowed_set]
-            if disallowed_ids:
-                raise HTTPException(
-                    status_code=403,
-                    detail=f"You do not have query access to document ids: {sorted(set(disallowed_ids))}.",
-                )
-            scoped_document_ids = requested_ids
+        requested_ids = [int(document_id) for document_id in payload.document_ids]
+        allowed_set = set(scoped_document_ids)
+        disallowed_ids = [document_id for document_id in requested_ids if document_id not in allowed_set]
+        if disallowed_ids:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You do not have query access to document ids: {sorted(set(disallowed_ids))}.",
+            )
+        scoped_document_ids = requested_ids
 
         if not scoped_document_ids:
             raise HTTPException(status_code=400, detail="No accessible documents selected for retrieval.")
